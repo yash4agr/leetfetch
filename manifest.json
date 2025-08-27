@@ -1,0 +1,11 @@
+{
+    "id": "leetfetch",
+    "name": "LeetFetch",
+	"version": "0.1.0",
+	"minAppVersion": "0.15.0",
+    "description": "Sync your LeetCode progress to Obsidian. Automatically fetch solved problems, create notes, and build your DSA knowledge base with smart backlinking.",
+    "author": "LeetFetch Team",
+    "authorUrl": "https://github.com/yash4agr/leetfetch",
+    "fundingUrl": "https://github.com/sponsors/yash4agr",
+	"isDesktopOnly": false
+}
