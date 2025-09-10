@@ -11,36 +11,63 @@ import {
 } from "obsidian";
 import { LeetCodeAPI } from "./leetcode";
 import { ProblemLogWriter } from "./writer";
+import { BaseManager } from "./bases";
 
 interface LeetFetchSettings {
+	// LeetCode API Configuration
 	username: string;
 	sessionToken: string;
-	logFilePath: string;
+	
+	// Core Bases Configuration
+	baseFilePath: string;
+	basesDefaultView: string;
+	useBasesFormat: boolean;
+	
+	// Individual Notes Configuration
 	createIndividualNotes: boolean;
-	autoSync: boolean;
-	syncInterval: number; // in minutes
+	individualNotesPath: string;
 	noteTemplatePath: string;
+	
+	// Topic Management
 	topicTagsEnabled: boolean;
 	topicBacklinkEnabled: boolean;
-	individualNotesPath: string;
 	topicNotesPath: string;
+	
+	// Sync Configuration
+	autoSync: boolean;
+	syncInterval: number; // in minutes
 	fetchAllOnEmpty: boolean;
+	
+	// Additional Features
 	addAdditionalNotes: boolean;
 }
 
 const DEFAULT_SETTINGS: LeetFetchSettings = {
+	// LeetCode API Configuration
 	username: "",
 	sessionToken: "",
-	logFilePath: "DSA/ProblemLogs.md",
+	
+	// Core Bases Configuration
+	baseFilePath: "DSA/leetcode-problems.base",
+	basesDefaultView: "All Problems",
+	useBasesFormat: true,
+	
+	// Individual Notes Configuration
 	createIndividualNotes: true,
-	autoSync: false,
-	syncInterval: 60, // in minutes
+	individualNotesPath: "DSA/Problems",
 	noteTemplatePath: "",
+	
+	// Topic Management
 	topicTagsEnabled: true,
 	topicBacklinkEnabled: true,
-	individualNotesPath: "DSA/Problems",
 	topicNotesPath: "DSA/Topics",
+	
+	// Sync Configuration
+	autoSync: false,
+	syncInterval: 60, // in minutes
 	fetchAllOnEmpty: true,
+	
+	// Additional Features
 	addAdditionalNotes: false,
 };
 
@@ -110,6 +137,22 @@ export default class LeetFetchPlugin extends Plugin {
 			},
 		});
 
+		this.addCommand({
+			id: "initialize-bases",
+			name: "Initialize Obsidian Bases Format",
+			callback: () => {
+				this.initializeBasesFormat();
+			},
+		});
+
+		this.addCommand({
+			id: "validate-bases-integrity",
+			name: "Validate Bases Data Integrity",
+			callback: () => {
+				this.validateBasesIntegrity();
+			},
+		});
+
 		this.addSettingTab(new LeetFetchSettingTab(this.app, this));
 
 		if (this.settings.autoSync) {
@@ -129,7 +172,7 @@ export default class LeetFetchPlugin extends Plugin {
 		try {
 			new Notice("Syncing problems...");
 
-			// check if log file exists and is empty
+			// Check if we should fetch all problems (when base is empty or doesn't exist)
 			const shouldFetchAll = await this.shouldFetchAllProblems();
 
 			let problems;
@@ -140,7 +183,7 @@ export default class LeetFetchPlugin extends Plugin {
 				problems = await this.leetcodeAPI.fetchRecentSubmissions();
 			}
 			
-			const newProblems = await this.writer.updateProblemLog(problems);
+			const newProblems = await this.writer.updateProblemBase(problems);
 
 			if (this.settings.createIndividualNotes) {
 				await this.writer.createIndividualNotes(newProblems);
@@ -170,7 +213,7 @@ export default class LeetFetchPlugin extends Plugin {
 			new Notice("Fetching all submissions...");
 
 			const problems = await this.leetcodeAPI.fetchAllSubmissions();
-			const newProblems = await this.writer.updateProblemLog(problems);
+			const newProblems = await this.writer.updateProblemBase(problems);
 
 			if (this.settings.createIndividualNotes) {
 				await this.writer.createIndividualNotes(newProblems);
@@ -189,22 +232,26 @@ export default class LeetFetchPlugin extends Plugin {
 		}
 
 		try {
-			const logFile = this.app.vault.getFileByPath(
-				this.settings.logFilePath
+			const baseFile = this.app.vault.getFileByPath(
+				this.settings.baseFilePath
 			);
-			if (!logFile) {
-				return true; // file doesn't exist
+			if (!baseFile) {
+				return true; // base file doesn't exist
 			}
-			// await this.leetcodeAPI.loadProcessedQuestions([this.settings.logFilePath]);
-			const content = await this.app.vault.read(logFile);
-			const lines = content
-				.split("\n")
-				.filter(
-					(line) => line.startsWith("|") && !line.includes("Date")
-				);
-			return lines.length === 0; // file is empty of problem entries
+			
+			// Check if base has any data by looking at the source folder
+			const sourceFolder = this.app.vault.getAbstractFileByPath(
+				this.settings.individualNotesPath
+			);
+			if (!sourceFolder) {
+				return true; // source folder doesn't exist
+			}
+			
+			// Count existing problem notes
+			const files = await this.app.vault.adapter.list(this.settings.individualNotesPath);
+			return files.files.length === 0; // no problem notes exist
 		} catch (error) {
-			console.error("Error checking log file:", error);
+			console.error("Error checking base status:", error);
 			return false;
 		}
 	}
@@ -279,6 +326,49 @@ export default class LeetFetchPlugin extends Plugin {
 			.toLowerCase()
 			.replace(/[^a-z0-9\s-]/g, "")
 			.replace(/\s+/g, "-");
+	}
+
+	async initializeBasesFormat() {
+		if (!this.settings.username) {
+			new Notice("Please set your LeetCode username in the plugin settings.");
+			return;
+		}
+
+		try {
+			new Notice("Initializing Obsidian Bases format...");
+			
+			const baseManager = new BaseManager(this.app, this.settings);
+			await baseManager.createOrUpdateBase();
+			
+			new Notice("✅ Obsidian Bases format initialized successfully!");
+		} catch (error) {
+			console.error("Bases initialization failed:", error);
+			new Notice(`❌ Bases initialization failed: ${error.message}`);
+		}
+	}
+
+	async validateBasesIntegrity() {
+		if (!this.settings.useBasesFormat) {
+			new Notice("Bases format is not enabled. Please enable it in settings.");
+			return;
+		}
+
+		try {
+			new Notice("Validating Bases data integrity...");
+			
+			const baseManager = new BaseManager(this.app, this.settings);
+			const validation = await baseManager.validateBaseIntegrity();
+			
+			if (validation.valid) {
+				new Notice("✅ Bases data integrity check passed!");
+			} else {
+				new Notice(`❌ Found ${validation.issues.length} integrity issues. Check console for details.`);
+				console.error("Bases integrity issues:", validation.issues);
+			}
+		} catch (error) {
+			console.error("Validation failed:", error);
+			new Notice(`Validation failed: ${error.message}`);
+		}
 	}
 
 	setupAutoSync() {
@@ -376,9 +466,9 @@ class LeetFetchSettingTab extends PluginSettingTab {
 			.addText((text) =>
 				text
 					.setPlaceholder("DSA/ProblemLogs.md")
-					.setValue(this.plugin.settings.logFilePath)
+					.setValue(this.plugin.settings.baseFilePath)
 					.onChange(async (value) => {
-						this.plugin.settings.logFilePath = value;
+						this.plugin.settings.baseFilePath = value;
 						await this.plugin.saveSettings();
 					})
 			);
@@ -493,6 +583,53 @@ class LeetFetchSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// Bases Settings
+		containerEl.createEl("h3", { text: "Obsidian Bases Integration" });
+
+		new Setting(containerEl)
+			.setName("Use Bases Format")
+			.setDesc(
+				"Store problem data in Obsidian Bases format instead of markdown tables."
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.useBasesFormat)
+					.onChange(async (value) => {
+						this.plugin.settings.useBasesFormat = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Base File Path")
+			.setDesc("Path to the Obsidian Base file for storing problem data.")
+			.addText((text) =>
+				text
+					.setPlaceholder("DSA/leetcode-problems.base")
+					.setValue(this.plugin.settings.baseFilePath)
+					.onChange(async (value) => {
+						this.plugin.settings.baseFilePath = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Default Bases View")
+			.setDesc("Default view to display in the Bases interface.")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("All Problems", "All Problems")
+					.addOption("Solved Problems", "Solved Problems")
+					.addOption("By Difficulty", "By Difficulty")
+					.addOption("To Review", "To Review")
+					.setValue(this.plugin.settings.basesDefaultView)
+					.onChange(async (value) => {
+						this.plugin.settings.basesDefaultView = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+
 		// Auto Sync
 		containerEl.createEl("h3", { text: "Auto Sync" });
 
@@ -542,6 +679,15 @@ class LeetFetchSettingTab extends PluginSettingTab {
 			.addButton((button) =>
 				button.setButtonText("Generate Stats").onClick(() => {
 					this.plugin.generateStatsReport();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Validate Bases Integrity")
+			.setDesc("Check data integrity of the Bases format.")
+			.addButton((button) =>
+				button.setButtonText("Validate Integrity").onClick(() => {
+					this.plugin.validateBasesIntegrity();
 				})
 			);
 	}
