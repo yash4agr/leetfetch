@@ -1,9 +1,6 @@
-import { create } from "domain";
 import {
 	App,
-	Editor,
 	MarkdownView,
-	Modal,
 	Notice,
 	Plugin,
 	PluginSettingTab,
@@ -106,7 +103,7 @@ export default class LeetFetchPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.leetcodeAPI = new LeetCodeAPI(this.settings);
-		this.writer = new ProblemLogWriter(this.app, this.settings);
+		this.writer = new ProblemLogWriter(this.app, this.settings, this);
 
 		// This creates an icon in the left ribbon.
 		this.addRibbonIcon("download", "Sync LeetCode Problems", () => {

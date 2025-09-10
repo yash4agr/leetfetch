@@ -40,13 +40,15 @@ function normalizePath(path: string): string {
 export class ProblemLogWriter {
     private app: App;
     private settings: any;
+    private plugin: any;
     private processedProblems: Set<string> = new Set();
     private noteTemplate: string = DEFAULT_NOTE_TEMPLATE;
     private baseManager: BaseManager;
 
-    constructor(app: App, settings: any) {
+    constructor(app: App, settings: any, plugin: any) {
         this.app = app;
         this.settings = settings;
+        this.plugin = plugin;
         this.baseManager = new BaseManager(app, settings);
         this.loadProcessedProblems();
         this.loadNoteTemplate();
@@ -101,8 +103,8 @@ export class ProblemLogWriter {
         if (this.settings.useBasesFormat) {
             await this.updateBasesFormat(newProblems);
         } else {
-            // Fallback to markdown table format if needed
-            await this.updateMarkdownTableFormat(newProblems);
+            new Notice("Enable Bases!");
+            
         }
         
         // Mark as processed
@@ -128,27 +130,6 @@ export class ProblemLogWriter {
         } catch (error) {
             console.error("Error updating Bases format:", error);
             new Notice(`Error updating problems: ${error.message}`);
-            throw error;
-        }
-    }
-
-    private async updateMarkdownTableFormat(newProblems: LeetCodeProblem[]): Promise<void> {
-        console.warn("Markdown table format is deprecated. Consider enabling Bases format.");
-        
-        try {
-            const logFile = await this.ensureLogFile();
-            const existingContent = await this.app.vault.read(logFile);
-            
-            // Generate new entries
-            const newEntries = newProblems.map(problem => this.formatProblemEntry(problem));
-            
-            // Update the log file (insert at top)
-            const updatedContent = this.insertNewEntriesAtTop(existingContent, newEntries);
-            await this.app.vault.modify(logFile, updatedContent);
-            
-            console.log(`Added ${newProblems.length} problems to markdown table`);
-        } catch (error) {
-            console.error("Error updating markdown table:", error);
             throw error;
         }
     }
@@ -333,27 +314,6 @@ ${backlink}
         }
     }
 
-    // Legacy markdown table methods (for backward compatibility)
-
-    private async ensureLogFile(): Promise<TFile> {
-        const filePath = this.settings.logFilePath;
-        let file = this.app.vault.getAbstractFileByPath(filePath);
-        
-        if (!file) {
-            // Create directory if it doesn't exist
-            const dirPath = filePath.substring(0, filePath.lastIndexOf('/'));
-            if (dirPath) {
-                await this.ensureDirectory(dirPath);
-            }
-            
-            // Create the file with header
-            const initialContent = this.getLogFileHeader();
-            file = await this.app.vault.create(filePath, initialContent);
-        }
-        
-        return file as TFile;
-    }
-
     private async ensureDirectory(dirPath: string): Promise<void> {
         const normalizedPath = normalizePath(dirPath);
         const folder = this.app.vault.getAbstractFileByPath(normalizedPath);
@@ -363,110 +323,27 @@ ${backlink}
         }
     }
 
-    private getLogFileHeader(): string {
-        return `# DSA Problem Log
-
-*Last updated: ${new Date().toISOString().split('T')[0]}*
-
-| Date | Problem ID | Problem | Topics | Difficulty | Status | Notes | Additional Notes |
-|------|------------|---------|---------|------------|---------|-------|------------------|
-`;
-    }
-
-    private formatProblemEntry(problem: LeetCodeProblem): string {
-        const date = new Date(problem.timestamp * 1000).toISOString().split('T')[0];
-        const problemLink = `[${problem.title}](${problem.url})<!-- ID: ${problem.id} -->`;
-        const topics = this.formatTopics(problem.topics);
-        const statusIcon = this.getStatusIcon(problem.status);
-        const notesLink = this.settings.createIndividualNotes ? 
-            `[[${this.sanitizeFileName(problem.title)}]]` : '';
-        const additionalNotes = this.settings.addAdditionalNotes ? '' : '';
-
-        return `| ${date} | ${problem.id} | ${problemLink} | ${topics} | ${problem.difficulty} | ${statusIcon} | ${notesLink} | ${additionalNotes} |`;
-    }
-
-    private formatTopics(topics: string[]): string {
-        if (!this.settings.topicTagsEnabled) {
-            return topics.join(', ');
-        }
-        
-        return topics.map(topic => `[[${topic}]]`).join(', ');
-    }
-
-    private getStatusIcon(status: string): string {
-        const statusMap: Record<string, string> = {
-            'Solved': 'Solved',
-            'Attempted': 'Attempted',
-            'Todo': 'Todo',
-            'Review': 'Review'
-        };
-        
-        return statusMap[status] || 'Unknown';
-    }
-
-    private insertNewEntriesAtTop(existingContent: string, newEntries: string[]): string {
-        const lines = existingContent.split('\n');
-        const headerEndIndex = lines.findIndex(line => line.includes('|---'));
-        
-        if (headerEndIndex === -1) {
-            // No table found, create new table
-            return existingContent + '\n' + this.getLogFileHeader() + '\n' + newEntries.join('\n');
-        }
-        
-        // Insert new entries right after the header separator
-        const beforeTable = lines.slice(0, headerEndIndex + 1);
-        const existingEntries = lines.slice(headerEndIndex + 1).filter(line => line.trim());
-        
-        return [
-            ...beforeTable,
-            ...newEntries,
-            ...existingEntries
-        ].join('\n');
-    }
-
     // Utility methods
-
-    private loadProcessedProblems(): void {
-        const data = localStorage.getItem('leetfetch-processed-problems');
-        if (data) {
-            try {
-                const parsed = JSON.parse(data);
-                this.processedProblems = new Set(parsed);
-            } catch (e) {
-                console.error('Failed to load processed problems:', e);
-            }
+    private async loadProcessedProblems(): Promise<void> {
+    try {
+        const data = await this.plugin.loadData();
+        if (data?.processedProblems) {
+            this.processedProblems = new Set(data.processedProblems);
         }
+    } catch (e) {
+        console.error('Failed to load processed problems:', e);
     }
+}
 
-    private saveProcessedProblems(): void {
-        try {
-            const data = JSON.stringify(Array.from(this.processedProblems));
-            localStorage.setItem('leetfetch-processed-problems', data);
-        } catch (e) {
-            console.error('Failed to save processed problems:', e);
-        }
+    private async saveProcessedProblems(): Promise<void> {
+    try {
+        const existingData = await this.plugin.loadData() || {};
+        existingData.processedProblems = Array.from(this.processedProblems);
+        await this.plugin.saveData(existingData);
+    } catch (e) {
+        console.error('Failed to save processed problems:', e);
     }
-
-    /**
-     * Export functionality
-     */
-    async exportToCSV(): Promise<string> {
-        const logFile = await this.ensureLogFile();
-        const content = await this.app.vault.read(logFile);
-        const lines = content.split('\n').filter(line => line.startsWith('|') && !line.includes('Date') && !line.includes('---'));
-        
-        let csv = 'Date,Problem ID,Problem,Topics,Difficulty,Status,Notes,Additional Notes\n';
-        
-        for (const line of lines) {
-            const cells = line.split('|').map(cell => cell.trim());
-            if (cells.length >= 8) {
-                const row = cells.slice(1, 9).map(cell => `"${cell.replace(/"/g, '""')}"`).join(',');
-                csv += row + '\n';
-            }
-        }
-        
-        return csv;
-    }
+}
 
     /**
      * Generate statistics report based on solved problems
