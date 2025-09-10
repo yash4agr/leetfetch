@@ -102,8 +102,8 @@ export class ProblemLogWriter {
         if (this.settings.useBasesFormat) {
             await this.updateBasesFormat(newProblems);
         } else {
-            new Notice("Enable Bases!");
-            
+            new Notice("Please enable Bases format in plugin settings to use this feature.");
+            return [];
         }
         
         // Mark as processed

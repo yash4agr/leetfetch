@@ -1,5 +1,5 @@
 {
-	"name": "leetfetch-obsidian",
+	"name": "leetfetch",
 	"version": "0.0.1",
 	"description": "LeetCode integration for Obsidian - sync problems, create notes, and build your DSA knowledge base",
 	"main": "main.js",
@@ -17,7 +17,7 @@
 		"problems",
 		"sync"
 	],
-	"author": "LeetFetch Team",
+	"author": "Yash Agrawal",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^16.11.6",

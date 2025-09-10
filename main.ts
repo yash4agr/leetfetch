@@ -468,8 +468,8 @@ class LeetFetchSettingTab extends PluginSettingTab {
 		containerEl.createEl("h3", { text: "File Paths" });
 
 		new Setting(containerEl)
-			.setName("Problem Log File Path")
-			.setDesc("Path to the problem log file.")
+			.setName("Base File Path")
+			.setDesc("Path to the Obsidian Base file for storing problem data.")
 			.addText((text) =>
 				text
 					.setPlaceholder("DSA/ProblemLogs.md")
@@ -592,33 +592,6 @@ class LeetFetchSettingTab extends PluginSettingTab {
 
 		// Bases Settings
 		containerEl.createEl("h3", { text: "Obsidian Bases Integration" });
-
-		new Setting(containerEl)
-			.setName("Use Bases Format")
-			.setDesc(
-				"Store problem data in Obsidian Bases format instead of markdown tables."
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.useBasesFormat)
-					.onChange(async (value) => {
-						this.plugin.settings.useBasesFormat = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("Base File Path")
-			.setDesc("Path to the Obsidian Base file for storing problem data.")
-			.addText((text) =>
-				text
-					.setPlaceholder("DSA/leetcode-problems.base")
-					.setValue(this.plugin.settings.baseFilePath)
-					.onChange(async (value) => {
-						this.plugin.settings.baseFilePath = value;
-						await this.plugin.saveSettings();
-					})
-			);
 
 		new Setting(containerEl)
 			.setName("Default Bases View")

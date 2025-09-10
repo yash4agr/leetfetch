@@ -495,9 +495,15 @@ export class BaseManager {
     }
 
     private async ensureDirectory(dirPath: string): Promise<void> {
-        const folder = this.app.vault.getAbstractFileByPath(dirPath);
-        if (!folder) {
-            await this.app.vault.createFolder(dirPath);
+        try {
+            const folder = this.app.vault.getAbstractFileByPath(dirPath);
+            if (!folder) {
+                await this.app.vault.createFolder(dirPath);
+                console.log(`Created directory: ${dirPath}`);
+            }
+        } catch (error) {
+            console.error(`Failed to create directory ${dirPath}:`, error);
+            throw new Error(`Could not create directory: ${dirPath}`);
         }
     }
 

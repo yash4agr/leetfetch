@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"minAppVersion": "1.9.10",
     "description": "Sync your LeetCode progress to Obsidian. Automatically fetch solved problems, create notes, and build your DSA knowledge base with smart backlinking.",
-    "author": "LeetFetch Team",
+    "author": "Yash Agrawal",
     "authorUrl": "https://github.com/yash4agr/leetfetch",
     "fundingUrl": "https://github.com/sponsors/yash4agr",
 	"isDesktopOnly": false
