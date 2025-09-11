@@ -35,7 +35,6 @@ function normalizePath(path: string): string {
 
 /**
  * Handles writing LeetCode problems to individual notes and managing Base integration
- * Clean implementation focused on Bases format
  */
 export class ProblemLogWriter {
     private app: App;

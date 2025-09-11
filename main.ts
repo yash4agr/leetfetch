@@ -37,6 +37,11 @@ interface LeetFetchSettings {
 	
 	// Additional Features
 	addAdditionalNotes: boolean;
+
+	// Advanced Settings
+	recentSubmissionsLimit: number; // Default: 20
+    maxRetries: number; // Default: 3
+    requestTimeout: number; // Default: 30000
 }
 
 const DEFAULT_SETTINGS: LeetFetchSettings = {
@@ -66,6 +71,11 @@ const DEFAULT_SETTINGS: LeetFetchSettings = {
 	
 	// Additional Features
 	addAdditionalNotes: false,
+
+	// Advanced Settings
+	recentSubmissionsLimit: 20,
+	maxRetries: 3,
+	requestTimeout: 30000,
 };
 
 const DEFAULT_NOTE_TEMPLATE = `# {{title}}
