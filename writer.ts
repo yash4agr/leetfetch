@@ -51,6 +51,7 @@ export class ProblemLogWriter {
         this.baseManager = new BaseManager(app, settings);
         this.loadProcessedProblems();
         this.loadNoteTemplate();
+
     }
 
     updateSettings(settings: any): void {
@@ -85,15 +86,17 @@ export class ProblemLogWriter {
     async updateProblemBase(problems: LeetCodeProblem[]): Promise<LeetCodeProblem[]> {
         // Get existing problem IDs to avoid duplicates
         const existingProblemIds = await this.baseManager.getExistingProblemIds();
-        
+        console.log(`Existing problems in base: ${existingProblemIds.size}`);
+        console.log(`Total fetched problems: ${problems.length}`);
+
         // Filter out already processed problems
-        const newProblems = problems.filter(p => 
-            !existingProblemIds.has(p.id) && 
+        const newProblems = problems.filter(p =>
+            !existingProblemIds.has(p.id) &&
             !this.processedProblems.has(p.titleSlug)
         );
 
         console.log(`Found ${newProblems.length} new problems to process.`);
-        
+
         if (newProblems.length === 0) {
             return [];
         }
@@ -105,11 +108,11 @@ export class ProblemLogWriter {
             new Notice("Please enable Bases format in plugin settings to use this feature.");
             return [];
         }
-        
+
         // Mark as processed
         newProblems.forEach(p => this.processedProblems.add(p.titleSlug));
         this.saveProcessedProblems();
-        
+
         return newProblems;
     }
 
@@ -117,13 +120,13 @@ export class ProblemLogWriter {
         try {
             // Ensure base file exists and is up to date
             await this.baseManager.createOrUpdateBase();
-            
+
             // Create individual problem notes with standardized frontmatter
             await this.createIndividualNotes(newProblems);
-            
+
             // Update problems in the base (ensures frontmatter is standardized)
             await this.baseManager.batchUpdateProblems(newProblems);
-            
+
             console.log(`Updated ${newProblems.length} problems in Bases format`);
             new Notice(`Added ${newProblems.length} new problems to your LeetCode base!`);
         } catch (error) {
@@ -143,7 +146,7 @@ export class ProblemLogWriter {
 
         const notesDir = this.settings.individualNotesPath;
         await this.ensureDirectory(notesDir);
-        
+
         for (const problem of problems) {
             await this.createProblemNote(problem);
         }
@@ -152,22 +155,22 @@ export class ProblemLogWriter {
     async createProblemNote(problem: LeetCodeProblem): Promise<void> {
         const fileName = this.sanitizeFileName(problem.title);
         const filePath = normalizePath(`${this.settings.individualNotesPath}/${fileName}.md`);
-        
+
         // Check if file already exists
         const existingFile = this.app.vault.getAbstractFileByPath(filePath);
         if (existingFile) {
             console.log(`Note for ${problem.title} already exists, skipping creation`);
             return;
         }
-        
+
         const content = this.generateNoteContent(problem);
         await this.app.vault.create(filePath, content);
-        
+
         // Create topic backlinks if enabled
         if (this.settings.topicTagsEnabled && this.settings.topicBacklinkEnabled) {
             await this.createTopicBacklinks(problem);
         }
-        
+
         console.log(`Created note: ${filePath}`);
     }
 
@@ -182,15 +185,15 @@ export class ProblemLogWriter {
     private generateNoteContent(problem: LeetCodeProblem): string {
         const date = new Date(problem.timestamp * 1000).toISOString().split('T')[0];
         const topics = problem.topics.join(', ');
-        const tags = this.settings.topicTagsEnabled ? 
-            (this.settings.topicBacklinkEnabled ? 
+        const tags = this.settings.topicTagsEnabled ?
+            (this.settings.topicBacklinkEnabled ?
                 problem.topics.map(t => `[[${this.settings.topicNotesPath}/${t}]]`).join(' ') :
-                problem.topics.map(t => `[[${t}]]`).join(' ')) : 
+                problem.topics.map(t => `[[${t}]]`).join(' ')) :
             problem.topics.join(', ');
-        
+
         // Generate frontmatter for Bases integration
         const frontmatter = this.generateProblemFrontmatter(problem);
-        
+
         let content = this.noteTemplate
             .replace(/\{\{title\}\}/g, problem.title)
             .replace(/\{\{difficulty\}\}/g, problem.difficulty)
@@ -222,8 +225,8 @@ export class ProblemLogWriter {
     }
 
     private generateProblemFrontmatter(problem: LeetCodeProblem): string {
-        const date = problem.timestamp ? 
-            new Date(problem.timestamp * 1000).toISOString().split('T')[0] : 
+        const date = problem.timestamp ?
+            new Date(problem.timestamp * 1000).toISOString().split('T')[0] :
             null;
 
         return `---
@@ -242,19 +245,19 @@ notes_link: "[[${this.sanitizeFileName(problem.title)}]]"
     private async createTopicBacklinks(problem: LeetCodeProblem): Promise<void> {
         const topicsDir = this.settings.topicNotesPath;
         await this.ensureDirectory(topicsDir);
-        
+
         for (const topic of problem.topics) {
             const topicFile = normalizePath(`${topicsDir}/${topic}.md`);
             const fileName = this.sanitizeFileName(problem.title);
             const backlink = `- [[${this.settings.individualNotesPath}/${fileName}]] - ${problem.difficulty} - ${problem.status}`;
-            
+
             await this.addToTopicFile(topicFile, topic, backlink);
         }
     }
 
     private async addToTopicFile(filePath: string, topic: string, backlink: string): Promise<void> {
         let file = this.app.vault.getAbstractFileByPath(filePath) as TFile;
-        
+
         if (!file) {
             const initialContent = `# ${topic}
 
@@ -273,16 +276,16 @@ ${backlink}
             file = await this.app.vault.create(filePath, initialContent);
         } else {
             const content = await this.app.vault.read(file);
-            
+
             // Check if backlink already exists
             if (content.includes(backlink)) {
                 return;
             }
-            
+
             // Add backlink under Problems section
             const lines = content.split('\n');
             const problemsIndex = lines.findIndex(line => line.includes('## Problems'));
-            
+
             if (problemsIndex !== -1) {
                 lines.splice(problemsIndex + 1, 0, backlink);
                 await this.app.vault.modify(file, lines.join('\n'));
@@ -299,7 +302,7 @@ ${backlink}
     async validateBaseIntegrity(): Promise<void> {
         try {
             const validation = await this.baseManager.validateBaseIntegrity();
-            
+
             if (validation.valid) {
                 new Notice("Base integrity validation passed!");
                 console.log("Base integrity validation: PASSED");
@@ -316,7 +319,7 @@ ${backlink}
     private async ensureDirectory(dirPath: string): Promise<void> {
         const normalizedPath = normalizePath(dirPath);
         const folder = this.app.vault.getAbstractFileByPath(normalizedPath);
-        
+
         if (!folder) {
             await this.app.vault.createFolder(normalizedPath);
         }
@@ -324,25 +327,34 @@ ${backlink}
 
     // Utility methods
     private async loadProcessedProblems(): Promise<void> {
-    try {
-        const data = await this.plugin.loadData();
-        if (data?.processedProblems) {
-            this.processedProblems = new Set(data.processedProblems);
+        try {
+            const data = await this.plugin.loadData();
+            if (data?.processedProblems) {
+                this.processedProblems = new Set(data.processedProblems);
+            }
+
+            // Clear processed problems if the folder doesn't exist
+            const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
+            if (!folder) {
+                console.log("Problems folder doesn't exist, clearing processed problems cache");
+                this.processedProblems.clear();
+                await this.saveProcessedProblems();
+            }
+        } catch (e) {
+            console.error('Failed to load processed problems:', e);
+            this.processedProblems.clear();
         }
-    } catch (e) {
-        console.error('Failed to load processed problems:', e);
     }
-}
 
     private async saveProcessedProblems(): Promise<void> {
-    try {
-        const existingData = await this.plugin.loadData() || {};
-        existingData.processedProblems = Array.from(this.processedProblems);
-        await this.plugin.saveData(existingData);
-    } catch (e) {
-        console.error('Failed to save processed problems:', e);
+        try {
+            const existingData = await this.plugin.loadData() || {};
+            existingData.processedProblems = Array.from(this.processedProblems);
+            await this.plugin.saveData(existingData);
+        } catch (e) {
+            console.error('Failed to save processed problems:', e);
+        }
     }
-}
 
     /**
      * Generate statistics report based on solved problems
@@ -351,7 +363,7 @@ ${backlink}
         try {
             // Get existing problem IDs to calculate stats
             const existingIds = await this.baseManager.getExistingProblemIds();
-            
+
             return `# LeetCode Progress Report
 
 *Generated: ${new Date().toISOString().split('T')[0]}*
@@ -360,20 +372,6 @@ ${backlink}
 - **Total Problems Solved:** ${existingIds.size}
 - **Base File Path:** ${this.settings.baseFilePath}
 - **Individual Notes Path:** ${this.settings.individualNotesPath}
-
-## Configuration
-- **Using Bases Format:** ${this.settings.useBasesFormat ? 'Yes' : 'No'}
-- **Creating Individual Notes:** ${this.settings.createIndividualNotes ? 'Yes' : 'No'}
-- **Topic Tags Enabled:** ${this.settings.topicTagsEnabled ? 'Yes' : 'No'}
-- **Auto Sync:** ${this.settings.autoSync ? 'Yes' : 'No'}
-
-## Recent Activity
-Problems processed in this session: ${this.processedProblems.size}
-
-## Next Steps
-- Continue solving problems to expand your database
-- Use "Sync LeetCode Problems" to update your progress
-- Review individual problem notes for detailed solutions
 
 ---
 *Generated by LeetFetch Plugin*`;
@@ -388,5 +386,11 @@ Could not generate detailed statistics: ${error.message}
 
 Please check your plugin configuration and try again.`;
         }
+    }
+
+    clearProcessedProblems(): void {
+        this.processedProblems.clear();
+        this.saveProcessedProblems();
+        console.log("Cleared processed problems cache.");
     }
 }

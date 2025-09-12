@@ -463,17 +463,44 @@ export class BaseManager {
         const ids = new Set<number>();
         
         try {
+            // First check if the directory exists
+            const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
+            if (!folder) {
+                console.log("Individual notes folder doesn't exist, returning empty set");
+                return ids;
+            }
+
             const files = await this.getProblemsInFolder();
-            const cachedData = await Promise.all(
-                files.map(file => this.getCachedContent(file))
-            );
+
+            // If no files exist, return empty set
+            if (files.length === 0) {
+                console.log("No problem files found in folder, returning empty set");
+                return ids;
+            }
+
+
+            // Process files in batches to avoid memory issues
+            const BATCH_SIZE = 50;
+            for (let i = 0; i < files.length; i += BATCH_SIZE) {
+                const batch = files.slice(i, i + BATCH_SIZE);
+                
+                const batchResults = await Promise.allSettled(
+                    batch.map(file => this.getCachedContent(file))
+                );
+                
+                batchResults.forEach((result, index) => {
+                    if (result.status === 'fulfilled') {
+                        const problemId = result.value.frontmatter.problem_id;
+                        if (typeof problemId === 'number' && problemId > 0) {
+                            ids.add(problemId);
+                        }
+                    } else {
+                        console.warn(`Failed to read ${batch[index].path}:`, result.reason);
+                    }
+                });
+            }
             
-            cachedData.forEach(cache => {
-                const problemId = cache.frontmatter.problem_id;
-                if (typeof problemId === 'number') {
-                    ids.add(problemId);
-                }
-            });
+            console.log(`Found ${ids.size} existing problem IDs`);
         } catch (error) {
             console.warn("Error retrieving existing problem IDs:", error);
         }
@@ -509,15 +536,30 @@ export class BaseManager {
 
     private async getProblemsInFolder(): Promise<TFile[]> {
         const files: TFile[] = [];
-        const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
+
+        try {
+            const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
+            if (!folder) {
+                return files;
+            }
+
+            // Get all markdown files in the problems folder
+            const allFiles = this.app.vault.getMarkdownFiles();
+            const problemFiles = allFiles.filter(file => 
+            file.path.startsWith(this.settings.individualNotesPath + '/') &&
+            file.extension === 'md'
+            );
         
-        if (folder) {
-            this.app.vault.getMarkdownFiles()
-                .filter(file => file.path.startsWith(this.settings.individualNotesPath))
-                .forEach(file => files.push(file));
+            return problemFiles;
+        } catch (error) {
+            console.error("Error getting problems in folder:", error);
+            return files;
         }
-        
-        return files;
+    } 
+
+    // Clear all cached data
+    clearCache(): void {
+        this.cache.clear();    
     }
 
     // Clean up resources

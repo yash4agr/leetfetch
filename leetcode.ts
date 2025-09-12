@@ -178,6 +178,14 @@ export class LeetCodeAPI {
 				throw: false,
 			});
 
+			console.log('📥 CSRF Token Response:', {
+				status: response.status,
+				statusText: response.status === 200 ? 'OK' : 'Error',
+				headers: response.headers,
+				textLength: response.text?.length || 0,
+				textPreview: response.text?.substring(0, 200) + '...'
+			});
+
 			if (response.status !== 200) {
 				console.warn('Failed to fetch CSRF token from main page');
 				return null;
@@ -302,6 +310,18 @@ export class LeetCodeAPI {
 					headers["Cookie"] = `csrftoken=${csrfToken}`;
 				}
 			}
+			
+			// Log the request details
+			console.log('🚀 Making GraphQL Request:', {
+				url: this.graphqlURL,
+				method: 'POST',
+				headers: {
+					...headers,
+					'Cookie': headers.Cookie ? headers.Cookie : undefined
+				},
+				query: query,
+				variables: variables
+			});
 
 			try {
 				const response = await requestUrl({
@@ -314,6 +334,28 @@ export class LeetCodeAPI {
 					}),
 					throw: false,
 				});
+
+				// Log the complete response regardless of status
+				console.log('📥 GraphQL API Response:', {
+					status: response.status,
+					statusText: response.status >= 200 && response.status < 300 ? 'Success' : 'Error',
+					headers: response.headers,
+					textLength: response.text?.length || 0,
+					responseText: response.text || 'No response text',
+					timestamp: new Date().toISOString()
+				});
+
+				// Additional detailed logging for error responses
+				if (response.status >= 400) {
+					console.error('❌ Error Response Details:', {
+						status: response.status,
+						fullResponse: response.text,
+						requestQuery: query,
+						requestVariables: variables
+					});
+				}
+
+
 
 				// Handle different HTTP status codes
 				if (response.status === 403) {
@@ -523,15 +565,18 @@ export class LeetCodeAPI {
 		const submissionLimit = Math.max(1, Math.min(limit || this.settings.recentSubmissionsLimit, 100));
 
 		const query = `
-			query recentAcSubmissions($username: String!, $limit: Int!) {
-				recentAcSubmissionList(username: $username, limit: $limit) {
-					id
-					title
-					titleSlug
-					timestamp
-				}
-			}
-		`;
+        query recentAcSubmissions($username: String!, $limit: Int!) {
+            recentAcSubmissionList(username: $username, limit: $limit) {
+                id
+                title
+                titleSlug
+                timestamp
+                statusDisplay
+                lang
+                url
+            }
+        }
+    `;
 
 		const data = await this.makeGraphQLRequest(query, {
 			username: this.settings.username,
@@ -543,24 +588,24 @@ export class LeetCodeAPI {
 		}
 
 		const problems: LeetCodeProblem[] = [];
-		const seenIds = new Set<number>();
+		const seenTitleSlugs = new Set<string>();
 		const failedProblems: string[] = [];
 
 		for (const submission of data.recentAcSubmissionList) {
 			try {
+				// Skip duplicates within this batch using titleSlug
+				if (seenTitleSlugs.has(submission.titleSlug)) {
+					continue;
+				}
+
 				const problemDetails = await this.fetchProblemDetails(submission.titleSlug);
 
-				// Skip if already processed
+				// Skip if already processed (if filtering enabled)
 				if (filterProcessed && this.isQuestionProcessed(problemDetails.id)) {
 					continue;
 				}
 
-				// Skip duplicates within this batch
-				if (seenIds.has(problemDetails.id)) {
-					continue;
-				}
-
-				seenIds.add(problemDetails.id);
+				seenTitleSlugs.add(submission.titleSlug);
 
 				problems.push({
 					...problemDetails,
@@ -568,11 +613,14 @@ export class LeetCodeAPI {
 					status: "Solved",
 					runtime: "",
 					memory: "",
-					language: "",
+					language: submission.lang || "",
+					submissionId: parseInt(submission.id) || 0,
 				});
 
 				// Mark as processed
-				this.markQuestionProcessed(problemDetails.id);
+				if (filterProcessed) {
+					this.markQuestionProcessed(problemDetails.id);
+				}
 			} catch (error) {
 				failedProblems.push(`${submission.titleSlug}: ${error instanceof Error ? error.message : error}`);
 				console.error(`Failed to fetch problem details for ${submission.titleSlug}:`, error);
@@ -592,15 +640,15 @@ export class LeetCodeAPI {
 			console.warn(`Failed to fetch ${failedProblems.length} problem details out of ${data.recentAcSubmissionList.length} submissions`);
 		}
 
-		return problems;
-	}
+    return problems.sort((a, b) => b.timestamp - a.timestamp);
+}
 
 	async fetchAllSubmissions(): Promise<LeetCodeProblem[]> {
 		if (!this.settings.sessionToken?.trim()) {
 			console.warn("Session token required for all submissions, falling back to recent submissions");
-			return this.fetchRecentSubmissions();
+			return this.fetchRecentSubmissions(false, 100);
 		}
-
+		console.log("Fetching all submissions for user:", this.settings.username);
 		const query = `
 			query getSubmissions($offset: Int!, $limit: Int!, $lastKey: String) {
 				submissionList(offset: $offset, limit: $limit, lastKey: $lastKey) {
@@ -622,16 +670,19 @@ export class LeetCodeAPI {
 		`;
 
 		const problems: LeetCodeProblem[] = [];
-		const processedProblems = new Set<string>();
+		const processedTitleSlugs = new Set<string>();
 		const failedProblems: string[] = [];
+
 		const limit = 50;
 		let offset = 0;
 		let hasNext = true;
 		let lastKey: string | null = null;
 		let consecutiveFailures = 0;
 		const maxConsecutiveFailures = 3;
+		let totalProcessed = 0;
+		const maxProblems = 3500; // Privacy: Limit total problems to prevent excessive data collection
 
-		while (hasNext && consecutiveFailures < maxConsecutiveFailures) {
+		while (hasNext && consecutiveFailures < maxConsecutiveFailures && totalProcessed < maxProblems) {
 			try {
 				const data: any = await this.makeGraphQLRequest(query, { 
 					offset, 
@@ -640,22 +691,28 @@ export class LeetCodeAPI {
 				});
 				
 				const page: any = data.submissionList;
+				console.log(`Fetched submission batch: offset=${offset}, limit=${limit}, submissions=${page?.submissions?.length || 0}, hasNext=${page?.hasNext}, lastKey=${page?.lastKey}`);
 				if (!page?.submissions) {
 					console.warn('No submissions found in response page');
 					break;
 				}
 
 				consecutiveFailures = 0; // Reset on successful request
-
-				for (const sub of page.submissions) {
-					if (!processedProblems.has(sub.titleSlug) && !sub.isPending) {
+				console.log(`Fetched ${page.submissions.length} submissions from batch`);
+				// Process only if accepted submissions
+				const acceptedSubmissions = page.submissions.filter(
+					(sub: any) => sub.statusDisplay === "Accepted"
+            );
+			console.log(`Processing ${acceptedSubmissions.length} accepted submissions from batch`);
+				for (const sub of acceptedSubmissions) {
+					if (!processedTitleSlugs.has(sub.titleSlug)) {
 						try {
 							const problemDetails = await this.fetchProblemDetails(sub.titleSlug);
 
 							problems.push({
 								...problemDetails,
 								timestamp: sub.timestamp,
-								status: sub.statusDisplay === "Accepted" ? "Solved" : "Attempted",
+								status: "Solved",
 								submissionId: parseInt(sub.id),
 								runtime: sub.runtime || "",
 								memory: sub.memory || "",
@@ -663,7 +720,8 @@ export class LeetCodeAPI {
 								solution: "",
 							});
 
-							processedProblems.add(sub.titleSlug);
+							processedTitleSlugs.add(sub.titleSlug);
+							totalProcessed++;
 						} catch (error) {
 							failedProblems.push(`${sub.titleSlug}: ${error instanceof Error ? error.message : error}`);
 							console.error(`Failed to fetch problem details for ${sub.titleSlug}:`, error);
@@ -676,9 +734,15 @@ export class LeetCodeAPI {
 				offset += page.submissions.length;
 
 				// Add delay between batch requests
-				if (hasNext) {
+				if (hasNext && totalProcessed < maxProblems) {
 					await this.sleep(500);
 				}
+
+				// Progress logging for large operations
+				if (totalProcessed > 0 && totalProcessed % 100 === 0) {
+					console.log(`Processed ${totalProcessed} problems so far...`);
+				}
+
 			} catch (error) {
 				consecutiveFailures++;
 				console.error(`Failed to fetch submission batch (attempt ${consecutiveFailures}/${maxConsecutiveFailures}):`, error);
@@ -697,10 +761,13 @@ export class LeetCodeAPI {
 			}
 		}
 
+		if (totalProcessed >= maxProblems) {
+        console.warn(`Reached maximum problem limit (${maxProblems}) for privacy protection`);
+		}
+
 		if (failedProblems.length > 0) {
 			console.warn(`Failed to fetch details for ${failedProblems.length} problems during full sync`);
 		}
-
 		return problems.sort((a, b) => b.timestamp - a.timestamp);
 	}
 

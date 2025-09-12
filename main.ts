@@ -137,6 +137,15 @@ export default class LeetFetchPlugin extends Plugin {
 			},
 		});
 
+		// Add debug command to clear cache
+		this.addCommand({
+			id: "clear-cache",
+			name: "Clear All Cache (Debug)",
+			callback: () => {
+				this.clearCache();
+			},
+		});
+
 		this.addSettingTab(new LeetFetchSettingTab(this.app, this));
 
 		if (this.settings.autoSync) {
@@ -169,7 +178,7 @@ export default class LeetFetchPlugin extends Plugin {
 			
 			const newProblems = await this.writer.updateProblemBase(problems);
 
-			if (this.settings.createIndividualNotes) {
+			if (this.settings.createIndividualNotes && newProblems.length > 0) {
 				await this.writer.createIndividualNotes(newProblems);
 			}
 
@@ -199,7 +208,7 @@ export default class LeetFetchPlugin extends Plugin {
 			const problems = await this.leetcodeAPI.fetchAllSubmissions();
 			const newProblems = await this.writer.updateProblemBase(problems);
 
-			if (this.settings.createIndividualNotes) {
+			if (this.settings.createIndividualNotes && newProblems.length > 0) {
 				await this.writer.createIndividualNotes(newProblems);
 			}
 
@@ -216,7 +225,7 @@ export default class LeetFetchPlugin extends Plugin {
 		}
 
 		try {
-			const baseFile = this.app.vault.getFileByPath(
+			const baseFile = this.app.vault.getAbstractFileByPath(
 				this.settings.baseFilePath
 			);
 			if (!baseFile) {
@@ -232,11 +241,16 @@ export default class LeetFetchPlugin extends Plugin {
 			}
 			
 			// Count existing problem notes
-			const files = await this.app.vault.adapter.list(this.settings.individualNotesPath);
-			return files.files.length === 0; // no problem notes exist
+			const files = this.app.vault.getMarkdownFiles().filter(file => 
+            file.path.startsWith(this.settings.individualNotesPath + '/') &&
+            file.extension === 'md'
+			);			
+			
+			const isEmpty = files.length === 0;
+			return isEmpty;
 		} catch (error) {
 			console.error("Error checking base status:", error);
-			return false;
+			return true; // default to fetching all on error
 		}
 	}
 
@@ -344,14 +358,31 @@ export default class LeetFetchPlugin extends Plugin {
 			const validation = await baseManager.validateBaseIntegrity();
 			
 			if (validation.valid) {
-				new Notice("✅ Bases data integrity check passed!");
+				new Notice("Bases data integrity check passed!");
 			} else {
-				new Notice(`❌ Found ${validation.issues.length} integrity issues. Check console for details.`);
+				new Notice(`Found ${validation.issues.length} integrity issues. Check console for details.`);
 				console.error("Bases integrity issues:", validation.issues);
 			}
 		} catch (error) {
 			console.error("Validation failed:", error);
 			new Notice(`Validation failed: ${error.message}`);
+		}
+	}
+
+	async clearCache() {
+		try {
+			// Clear processed problems from writer
+			await this.writer.clearProcessedProblems();
+			
+			// Clear base manager cache
+			const baseManager = new BaseManager(this.app, this.settings);
+			baseManager.clearCache();
+			
+			new Notice("Cache cleared successfully! Next sync will reprocess all problems.");
+			console.log("All caches cleared - next sync will reprocess problems");
+		} catch (error) {
+			console.error("Error clearing cache:", error);
+			new Notice(`Error clearing cache: ${error.message}`);
 		}
 	}
 
