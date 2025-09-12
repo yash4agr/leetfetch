@@ -14,6 +14,7 @@ interface LeetFetchSettings {
 	// LeetCode API Configuration
 	username: string;
 	sessionToken: string;
+	csrfToken: string;
 	
 	// Core Bases Configuration
 	baseFilePath: string;
@@ -48,6 +49,7 @@ const DEFAULT_SETTINGS: LeetFetchSettings = {
 	// LeetCode API Configuration
 	username: "",
 	sessionToken: "",
+	csrfToken: "",
 	
 	// Core Bases Configuration
 	baseFilePath: "DSA/leetcode-problems.base",
@@ -77,31 +79,6 @@ const DEFAULT_SETTINGS: LeetFetchSettings = {
 	maxRetries: 3,
 	requestTimeout: 30000,
 };
-
-const DEFAULT_NOTE_TEMPLATE = `# {{title}}
-
-**Difficulty:** {{difficulty}}  
-**Topics:** {{topics}}  
-**Link:** [LeetCode]({{url}})  
-**Date Solved:** {{date}}
-
-## Problem Description
-{{description}}
-
-## My Solution
-\`\`\`{{language}}
-// Your solution here
-\`\`\`
-
-## Notes
-- 
-
-## Related Problems
-- 
-
-## Tags
-{{tags}}
-`;
 
 export default class LeetFetchPlugin extends Plugin {
 	settings: LeetFetchSettings;
@@ -461,6 +438,76 @@ class LeetFetchSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.sessionToken = value;
 						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("CSRF Token (recommended)")
+			.setDesc(
+				"Required for authenticated requests. Get from browser cookies (csrftoken) or developer tools."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("Enter your CSRF token")
+					.setValue(this.plugin.settings.csrfToken)
+					.onChange(async (value) => {
+						this.plugin.settings.csrfToken = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Add helper section for token extraction
+		const tokenHelpEl = containerEl.createDiv();
+		tokenHelpEl.createEl("details", {}, (detailsEl) => {
+			detailsEl.createEl("summary", { text: "How to get tokens" });
+			
+			const contentEl = detailsEl.createDiv();
+			contentEl.createEl("h4", { text: "Method 1: Browser Developer Tools" });
+			contentEl.createEl("ol", {}, (ol) => {
+				ol.createEl("li", { text: "1. Open LeetCode in your browser and log in" });
+				ol.createEl("li", { text: "2. Press F12 to open Developer Tools" });
+				ol.createEl("li", { text: "3. Go to Application tab → Cookies → https://leetcode.com" });
+				ol.createEl("li", { text: "4. Copy the values for 'LEETCODE_SESSION' and 'csrftoken'" });
+			});
+
+			contentEl.createEl("h4", { text: "Method 2: Network Tab" });
+			contentEl.createEl("ol", {}, (ol) => {
+				ol.createEl("li", { text: "1. Open Developer Tools → Network tab" });
+				ol.createEl("li", { text: "2. Make any request on LeetCode (refresh page)" });
+				ol.createEl("li", { text: "3. Look for request headers containing the tokens" });
+			});
+
+			contentEl.createEl("h4", { text: "Security Note" });
+			contentEl.createEl("p", { 
+				text: "These tokens are stored locally in your vault. They're only used to authenticate with LeetCode's API and are not transmitted elsewhere. Keep them secure and don't share them."
+			});
+		});
+
+		// Test Connection button
+		new Setting(containerEl)
+			.setName("Test Connection")
+			.setDesc("Verify your credentials work with LeetCode's API.")
+			.addButton((button) =>
+				button
+					.setButtonText("Test Connection")
+					.setCta()
+					.onClick(async () => {
+						button.setButtonText("Testing...");
+						button.setDisabled(true);
+						
+						try {
+							const health = await this.plugin.leetcodeAPI.healthCheck();
+							if (health.healthy) {
+								new Notice("Connection successful!");
+							} else {
+								new Notice(`Connection failed: ${health.message}`);
+							}
+						} catch (error) {
+							new Notice(`Connection test failed: ${error.message}`);
+						} finally {
+							button.setButtonText("Test Connection");
+							button.setDisabled(false);
+						}
 					})
 			);
 

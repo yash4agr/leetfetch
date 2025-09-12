@@ -34,6 +34,7 @@ export interface LeetCodeSubmissionDetail {
 interface APISettings {
 	username: string;
 	sessionToken?: string;
+	csrfToken?: string;
 	recentSubmissionsLimit: number;
 	maxRetries: number;
 	requestTimeout: number;
@@ -42,7 +43,7 @@ interface APISettings {
 class LeetCodeAPIError extends Error {
 	constructor(
 		message: string,
-		public readonly type: 'NETWORK' | 'AUTH' | 'RATE_LIMIT' | 'NOT_FOUND' | 'UNKNOWN',
+		public readonly type: 'NETWORK' | 'CSRF' | 'AUTH' | 'RATE_LIMIT' | 'NOT_FOUND' | 'UNKNOWN',
 		public readonly statusCode?: number,
 		public readonly retryable: boolean = false
 	) {
@@ -61,10 +62,15 @@ export class LeetCodeAPI {
 	private lastRequestTime = 0;
 	private readonly MIN_REQUEST_INTERVAL = 100; // 100ms between requests
 
+	// CSRF management
+	private csrfToken: string | null = null;
+	private csrfTokenExpiry: number = 0;
+
 	constructor(settings: any) {
 		this.settings = {
 			username: settings.username || '',
 			sessionToken: settings.sessionToken,
+			csrfToken: settings.csrfToken,
 			recentSubmissionsLimit: settings.recentSubmissionsLimit || 20,
 			maxRetries: settings.maxRetries || 3,
 			requestTimeout: settings.requestTimeout || 30000, // 30 seconds
@@ -75,10 +81,17 @@ export class LeetCodeAPI {
 		this.settings = {
 			username: settings.username || '',
 			sessionToken: settings.sessionToken,
+			csrfToken: settings.csrfToken,
 			recentSubmissionsLimit: settings.recentSubmissionsLimit || 20,
 			maxRetries: settings.maxRetries || 3,
 			requestTimeout: settings.requestTimeout || 30000,
 		};
+
+		// Reset CSRF token if settings changed
+		if (this.settings.csrfToken !== this.csrfToken) {
+			this.csrfToken = this.settings.csrfToken || null;
+			this.csrfTokenExpiry = 0;
+		}
 	}
 
 	async loadProcessedQuestions(logFiles: string[]): Promise<void> {
@@ -150,6 +163,72 @@ export class LeetCodeAPI {
 		return new Promise(resolve => setTimeout(resolve, ms));
 	}
 
+	/**
+	 * Attempts to fetch CSRF token from LeetCode's main page
+	 * This is a fallback method - users should provide their own token
+	 */
+	private async fetchCSRFToken(): Promise<string | null> {
+		try {
+			const response = await requestUrl({
+				url: this.baseURL,
+				method: 'GET',
+				headers: {
+					'User-Agent': 'Mozilla/5.0 (compatible; LeetFetch/1.0)',
+				},
+				throw: false,
+			});
+
+			if (response.status !== 200) {
+				console.warn('Failed to fetch CSRF token from main page');
+				return null;
+			}
+
+			// Look for CSRF token in response
+			const csrfMatch = response.text.match(/csrf[Tt]oken['"]\s*:\s*['"]([^'"]+)['"]/);
+			if (csrfMatch) {
+				return csrfMatch[1];
+			}
+
+			// Alternative pattern
+			const metaCsrfMatch = response.text.match(/<meta\s+name=['"]csrf-token['"]\s+content=['"]([^'"]+)['"]/i);
+			if (metaCsrfMatch) {
+				return metaCsrfMatch[1];
+			}
+
+			console.warn('CSRF token not found in page content');
+			return null;
+		} catch (error) {
+			console.warn('Error fetching CSRF token:', error);
+			return null;
+		}
+	}
+
+	/**
+	 * Gets current CSRF token, fetching if necessary
+	 */
+	private async getCSRFToken(): Promise<string | null> {
+		// Use user-provided token first
+		if (this.settings.csrfToken?.trim()) {
+			return this.settings.csrfToken.trim();
+		}
+
+		// Check if we have a cached token that's still valid
+		const now = Date.now();
+		if (this.csrfToken && this.csrfTokenExpiry > now) {
+			return this.csrfToken;
+		}
+
+		// Try to fetch a new token
+		const fetchedToken = await this.fetchCSRFToken();
+		if (fetchedToken) {
+			this.csrfToken = fetchedToken;
+			this.csrfTokenExpiry = now + (30 * 60 * 1000); // Valid for 30 minutes
+			return fetchedToken;
+		}
+
+		return null;
+	}
+
 	private async exponentialBackoff<T>(
 		operation: () => Promise<T>,
 		maxRetries: number = this.settings.maxRetries,
@@ -207,8 +286,21 @@ export class LeetCodeAPI {
 				"User-Agent": "Mozilla/5.0 (compatible; LeetFetch/1.0)",
 			};
 
-			if (this.settings.sessionToken) {
-				headers["Cookie"] = `LEETCODE_SESSION=${this.settings.sessionToken}`;
+			// Add session cookie if available
+			if (this.settings.sessionToken?.trim()) {
+				headers["Cookie"] = `LEETCODE_SESSION=${this.settings.sessionToken.trim()}`;
+			}
+
+			// Add CSRF token if available
+			const csrfToken = await this.getCSRFToken();
+			if (csrfToken) {
+				headers["X-CSRFToken"] = csrfToken;
+				// Also add to cookies if we have a session
+				if (this.settings.sessionToken?.trim()) {
+					headers["Cookie"] += `; csrftoken=${csrfToken}`;
+				} else {
+					headers["Cookie"] = `csrftoken=${csrfToken}`;
+				}
 			}
 
 			try {
@@ -224,6 +316,29 @@ export class LeetCodeAPI {
 				});
 
 				// Handle different HTTP status codes
+				if (response.status === 403) {
+					const responseText = response.text?.toLowerCase() || '';
+					if (responseText.includes('csrf')) {
+						// Clear cached CSRF token on CSRF failure
+						this.csrfToken = null;
+						this.csrfTokenExpiry = 0;
+						
+						throw new LeetCodeAPIError(
+							'CSRF verification failed. Please provide a valid CSRF token in plugin settings or try again.',
+							'CSRF',
+							response.status,
+							true
+						);
+					}
+					
+					throw new LeetCodeAPIError(
+						'Authentication failed. Please check your session token and CSRF token.',
+						'AUTH',
+						response.status,
+						false
+					);
+				}
+				
 				if (response.status === 429) {
 					throw new LeetCodeAPIError(
 						'Rate limited by LeetCode. Please wait before retrying.',
@@ -233,7 +348,7 @@ export class LeetCodeAPI {
 					);
 				}
 
-				if (response.status === 401 || response.status === 403) {
+				if (response.status === 401) {
 					throw new LeetCodeAPIError(
 						'Authentication failed. Please check your session token.',
 						'AUTH',
