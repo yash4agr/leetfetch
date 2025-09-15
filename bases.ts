@@ -1,7 +1,6 @@
 import { App, TFile, Notice, parseYaml, stringifyYaml } from 'obsidian';
 import { LeetCodeProblem } from './leetcode';
 
-// Enhanced caching interface
 interface CacheEntry {
     content: string;
     frontmatter: Record<string, any>;
@@ -229,8 +228,6 @@ export class BaseManager {
     private async updateSingleFile(file: TFile): Promise<void> {
         try {
             const cachedContent = await this.getCachedContent(file);
-            // Process the individual file update
-            console.log(`Updated: ${file.path}`);
         } catch (error) {
             console.error(`Failed to update ${file.path}:`, error);
         }
@@ -267,7 +264,7 @@ export class BaseManager {
     }
 
     /**
-     * Optimized base creation with proper YAML handling
+     * Create base with proper YAML handling
      */
     async createOrUpdateBase(): Promise<void> {
         const baseFilePath = this.getBaseFilePath();
@@ -321,8 +318,8 @@ export class BaseManager {
         return stringifyYaml(config);
     }
 
-        /**
-     * Batch update multiple problems - your original use case
+    /**
+     * Batch update multiple problems
      */
     async batchUpdateProblems(problems: LeetCodeProblem[]): Promise<void> {
         const BATCH_SIZE = 10; // Process in smaller batches to avoid overwhelming the system
@@ -349,15 +346,15 @@ export class BaseManager {
         const successful = results.filter(r => r.status === 'fulfilled').length;
         const failed = results.length - successful;
 
-        console.log(`Batch update completed: ${successful} successful, ${failed} failed`);
+        // console.log(`Batch update completed: ${successful} successful, ${failed} failed`);
         
         if (successful > 0) {
             new Notice(`Updated ${successful} problems${failed > 0 ? ` (${failed} failed)` : ''}`);
         }
     }
 
-        /**
-     * Updates a single problem in the base (maintains your original interface)
+    /**
+     * Updates a single problem in the base
      */
     async updateProblemInBase(problem: LeetCodeProblem): Promise<void> {
         const notePath = this.getProblemNotePath(problem);
@@ -372,7 +369,7 @@ export class BaseManager {
     }
 
     /**
-     * Optimized frontmatter update using Obsidian's built-in processor
+     * Frontmatter update using Obsidian's built-in processor
      */
     async updateProblemFrontmatter(file: TFile, problem: LeetCodeProblem): Promise<void> {
         const updates = {
@@ -457,7 +454,7 @@ export class BaseManager {
     }
 
     /**
-     * Optimized existing IDs retrieval using cache
+     * Existing IDs retrieval using cache
      */
     async getExistingProblemIds(): Promise<Set<number>> {
         const ids = new Set<number>();
@@ -466,7 +463,7 @@ export class BaseManager {
             // First check if the directory exists
             const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
             if (!folder) {
-                console.log("Individual notes folder doesn't exist, returning empty set");
+                // console.log("Individual notes folder doesn't exist, returning empty set");
                 return ids;
             }
 
@@ -474,7 +471,7 @@ export class BaseManager {
 
             // If no files exist, return empty set
             if (files.length === 0) {
-                console.log("No problem files found in folder, returning empty set");
+                // console.log("No problem files found in folder, returning empty set");
                 return ids;
             }
 
@@ -500,7 +497,7 @@ export class BaseManager {
                 });
             }
             
-            console.log(`Found ${ids.size} existing problem IDs`);
+            // console.log(`Found ${ids.size} existing problem IDs`);
         } catch (error) {
             console.warn("Error retrieving existing problem IDs:", error);
         }
@@ -526,7 +523,7 @@ export class BaseManager {
             const folder = this.app.vault.getAbstractFileByPath(dirPath);
             if (!folder) {
                 await this.app.vault.createFolder(dirPath);
-                console.log(`Created directory: ${dirPath}`);
+                // console.log(`Created directory: ${dirPath}`);
             }
         } catch (error) {
             console.error(`Failed to create directory ${dirPath}:`, error);
@@ -571,6 +568,6 @@ export class BaseManager {
     updateSettings(settings: any): void {
         this.settings = settings;
         this.initializeBaseConfiguration();
-        this.cache.clear(); // Clear cache when settings change
+        this.cache.clear();
     }
 }
