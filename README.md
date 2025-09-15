@@ -1,256 +1,236 @@
-# LeetFetch - LeetCode + Obsidian Integration
+# LeetFetch
 
-Transform your LeetCode journey into a comprehensive knowledge base with smart note-taking, automatic syncing, and intelligent backlinking.
+> Transform your LeetCode journey into a structured knowledge base with automatic syncing and intelligent organization.
+
+LeetFetch automatically syncs your solved LeetCode problems into Obsidian, creating individual notes and building a comprehensive DSA knowledge base with backlinking and topic organization.
 
 ## Features
 
-### **Automatic Sync**
-- Fetch your recently solved LeetCode problems
-- Continuous updates to your Problem Log
-- Auto-sync at configurable intervals
-- Duplicate detection and prevention
+### Core Functionality
+- **Automatic Problem Sync**: Fetch your recently solved problems or complete submission history
+- **Individual Problem Notes**: Generate detailed notes for each problem with customizable templates
+- **Obsidian Bases Integration**: Store problems in structured database format with multiple views
+- **Smart Topic Organization**: Automatic topic tags and cross-referenced knowledge graphs
 
-### **Smart Note Generation**
-- Auto-create individual notes for each problem
-- Customizable note templates
-- Include problem description, difficulty, and topics
-- Link to original LeetCode problem
+### Data Management
+- **Duplicate Prevention**: Intelligent filtering to avoid re-importing existing problems
+- **Customizable Paths**: Configure where your problems, topics, and templates are stored
+- **Batch Processing**: Efficient handling of large problem sets
 
-### **Intelligent Backlinking**
-- Automatic topic tags like `[[Arrays]]`, `[[Dynamic Programming]]`
-- Create topic-based note networks
-- Cross-reference related problems
-- Build your DSA knowledge graph
+### Productivity Features
+- **Auto-sync Scheduling**: Configurable automatic syncing at set intervals
+- **Topic Backlinking**: Automatic `[[Topic]]` links for building connected notes
+- **Progress Tracking**: Overview of solving patterns and difficulty progression
+- **Template System**: Fully customizable note templates for different workflows
 
-### **Progress Tracking**
-- Beautiful problem log table in markdown
-- Difficulty-based categorization
-- Streak tracking and statistics
-- Export to CSV for external analysis
+## Installation
 
-### **Customization**
-- Configurable file paths and templates
-- Topic tag preferences
-- Auto-sync settings
-- Session token support for private data
+### Prerequisites
+- Obsidian v1.9.10 or higher
+- A LeetCode account
 
-## 🛠️ Installation
+### Manual Installation
+1. Download the latest release files (`main.js`, `manifest.json`, `styles.css`)
+2. Create a folder: `VaultName/.obsidian/plugins/leetfetch/`
+3. Copy the files into this folder
+4. Restart Obsidian
+5. Enable "LeetFetch" in Settings → Community Plugins
 
-### Method 1: Manual Installation (Recommended)
-
-1. **Download the Plugin Files**
-   - Download `main.js`, `manifest.json`, and `styles.css`
-   - Place them in your vault's `.obsidian/plugins/leetfetch/` directory
-
-2. **Enable the Plugin**
-   - Open Obsidian Settings → Community Plugins
-   - Enable "LeetFetch"
-
-### Method 2: Development Setup
-
+### Development Installation
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/leetfetch-obsidian.git
-cd leetfetch-obsidian
-
-# Install dependencies
+git clone https://github.com/yash4agr/leetfetch.git
+cd leetfetch
 npm install
-
-# Build the plugin
 npm run build
 
-# Link to your vault (replace with your vault path)
+# Link to your vault
 ln -s $(pwd) /path/to/your/vault/.obsidian/plugins/leetfetch
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. **Configure Settings**
-- Go to Settings → Community Plugins → LeetFetch
-- Enter your LeetCode username
-- Set your preferred file paths
-- Configure note templates
+### 1. Basic Configuration
+1. Open Obsidian Settings → Community Plugins → LeetFetch
+2. Enter your LeetCode username
+3. Configure file paths (defaults work for most users)
+4. Choose your preferred storage format
 
-### 2. **First Sync**
-- Click the LeetFetch ribbon icon (download symbol)
-- Or use Command Palette: "Sync LeetCode Problems"
-- Watch as your problems populate the log!
+### 2. Authentication (Optional)
+For private submissions and enhanced features:
+- **Session Token**: Copy from browser cookies (`LEETCODE_SESSION`)
+- **CSRF Token**: Copy from browser cookies (`csrftoken`)
 
-### 3. **Customize Your Workflow**
-- Edit the note template to match your style
-- Enable/disable topic tags
-- Set up auto-sync intervals
+**Security Note**: Tokens are stored locally in your vault and only used for LeetCode API access. See [Security](#security) section for details.
 
-## 📋 Configuration Options
+### 3. First Sync
+- Click the LeetFetch ribbon icon, or
+- Use Command Palette: "Sync LeetCode Problems"
+- For complete history: "Sync All LeetCode Problems"
 
-### **Basic Settings**
-- **Username**: Your LeetCode username
-- **Problem Log Path**: Where to store your main problem log (default: `DSA/Problem Log.md`)
-- **Create Individual Notes**: Generate separate files for each problem
-- **Session Token**: Optional - for accessing private submissions
+## Configuration
 
-### **Advanced Settings**
-- **Auto Sync**: Enable automatic syncing
-- **Sync Interval**: How often to sync (in minutes)
-- **Topic Tags**: Enable `[[tag]]` style linking
-- **Note Template**: Customize the format of generated notes
+### File Paths
+- **Base File**: `DSA/leetcode-problems.base` - Main structured database
+- **Individual Notes**: `DSA/Problems/` - Individual problem notes
+- **Topic Notes**: `DSA/Topics/` - Topic-based organization
+- **Templates**: Optional custom note template path
 
-## 📝 Default Note Template
+### Sync Options
+- **Auto Sync**: Enable automatic syncing at configurable intervals
+- **Fetch All on Empty**: Import complete history when starting fresh
+- **Recent Submissions Limit**: Number of recent problems to fetch (1-100)
 
+### Customization
+- **Topic Tags**: Enable `[[Arrays]]`, `[[Dynamic Programming]]` style linking
+- **Topic Backlinks**: Create dedicated topic pages with problem lists
+- **Individual Notes**: Toggle creation of separate files per problem
+- **Custom Templates**: Use your own note template format
+
+## Usage
+
+### Syncing Problems
+- **Recent Sync**: Fetches problems solved since last sync
+- **Full Sync**: Imports your entire submission history
+- **Auto Sync**: Runs automatically based on your interval setting
+
+### Working with Data
+- **Base View**: Browse problems in structured table format
+- **Individual Notes**: Detailed problem breakdowns with solution space
+- **Topic Pages**: See all problems by category (Arrays, DP, etc.)
+- **Graph View**: Visualize connections between topics and problems
+
+### Commands
+- `Sync LeetCode Problems` - Fetch recent submissions
+- `Sync All LeetCode Problems` - Import complete history
+- `Create Problem Note from Current Line` - Generate note from problem link
+- `Initialize Obsidian Bases Format` - Set up structured database
+- `Validate Bases Data Integrity` - Check data consistency
+
+## Templates
+
+### Default Note Template
 ```markdown
 # {{title}}
 
+[View on LeetCode]({{url}})
+
 **Difficulty:** {{difficulty}}  
 **Topics:** {{topics}}  
-**Link:** [LeetCode]({{url}})  
 **Date Solved:** {{date}}
 
-## Problem Description
-{{description}}
+## Solution
 
-## My Solution
 ```{{language}}
-// Your solution here
-``
+// Your solution here```
+
+## Approach
+
+## Complexity Analysis
+- **Time**: O(?)
+- **Space**: O(?)
 
 ## Notes
-- 
 
-## Related Problems
-- 
-
-## Tags
 {{tags}}
 ```
 
-## Commands
-
-- **Sync LeetCode Problems**: Fetch and update your problem log
-- **Create Problem Note from Current Line**: Generate a detailed note for the problem on the current line
-- **Generate Stats Report**: Create a comprehensive progress report
-
-## 📊 Sample Output
-
-### Problem Log
-```markdown
-# 📒 DSA Problem Log
-
-| Date       | Problem                               | Topics          | Difficulty | Status | Notes |
-|------------|---------------------------------------|-----------------|------------|--------|-------|
-| 2025-07-13 | [Two Sum](https://leetcode.com/...)   | [[Arrays]]      | Easy       | ✅     | Hash map approach |
-| 2025-07-13 | [Longest Substring](https://...)      | [[Sliding Window]] | Medium   | ✅     | Sliding window |
-| 2025-07-14 | [Merge Intervals](https://...)        | [[Intervals]]   | Medium     | ✅     | Sort first |
-```
-
-### Topic Pages
-Each topic gets its own page with backlinks:
-
-```markdown
-# Arrays
-
-## Problems
-- [[two-sum]] - Easy
-- [[three-sum]] - Medium
-- [[maximum-subarray]] - Easy
-
-## Notes
-- Common patterns: two pointers, sliding window
-- Time complexity considerations
-
-## Patterns
-- Hash maps for O(1) lookups
-- Two pointers for sorted arrays
-
-## Related Topics
-- [[Hash Tables]]
-- [[Two Pointers]]
-```
-
-## 🎯 Advanced Usage
-
-### **Custom Templates**
-You can use these variables in your note templates:
+### Template Variables
 - `{{title}}` - Problem title
 - `{{difficulty}}` - Easy/Medium/Hard
-- `{{topics}}` - Comma-separated topics
+- `{{topics}}` - Comma-separated topic list
 - `{{url}}` - LeetCode problem URL
 - `{{date}}` - Date solved
-- `{{description}}` - Problem description
+- `{{language}}` - Programming language used
 - `{{tags}}` - Topic tags for backlinking
+- `{{id}}` - Problem ID number
+- `{{status}}` - Solved/Attempted/Todo
 
-### **Batch Processing**
-- Run sync to process multiple problems at once
-- Automatic deduplication prevents duplicates
-- Progress tracking shows what's new
+## Security
 
-### **Integration with Other Plugins**
-- Works great with **Dataview** for dynamic queries
-- **Graph View** shows your knowledge connections
-- **Calendar** integration for tracking daily progress
+### Data Storage
+- **Local Only**: All data stored in your Obsidian vault
+- **No External Servers**: Tokens only used for direct LeetCode API calls
+- **Plain Text Storage**: Authentication tokens stored unencrypted in plugin settings
 
-## 🤝 Contributing
+### Token Security
+- Use tokens only on trusted devices
+- Create separate tokens for Obsidian vs browser use
+- Regenerate tokens periodically
+- Consider excluding plugin settings from cloud sync
 
-We welcome contributions! Here's how to help:
+### Recommendations
+- Minimize token permissions to required scope only
+- Monitor token usage in LeetCode account settings
+- Remove tokens when uninstalling plugin
 
-1. **Report Issues**: Found a bug? Open an issue
-2. **Suggest Features**: Have an idea? We'd love to hear it
-3. **Submit PRs**: Code contributions are always welcome
+## Troubleshooting
+
+### Common Issues
+
+**"User not found" error**
+- Verify your username is correct
+- Check that your LeetCode profile is public
+
+**"Authentication failed"**
+- Ensure session token is current and valid
+- Try regenerating CSRF token
+- Check token format (no extra spaces/characters)
+
+**"No new problems found"**
+- Plugin filters out already imported problems
+- Use "Sync All Problems" for complete refresh
+- Check that you have recent AC submissions
+
+**Sync hanging or timing out**
+- Large submission histories may take time
+- Check internet connection stability
+- Try reducing recent submissions limit
+
+### Advanced Troubleshooting
+1. Check browser console in Developer Tools for detailed error messages
+2. Use "Test Connection" in plugin settings to verify API access
+3. Try "Clear All Cache" command to reset processed problems tracking
+4. Check file permissions in your vault directory
+
+## Limitations
+
+- Requires internet connection for syncing
+- LeetCode API rate limits may affect large imports
+- Session tokens expire and need periodic renewal
+- Mobile sync may be limited by token access methods
+
+## Contributing
+
+Contributions welcome! See areas where help is needed:
+- Additional programming language templates
+- Integration with other coding platforms
+- Enhanced statistics and analytics
+- Mobile app token extraction guides
 
 ### Development Setup
 ```bash
-# Fork and clone
-git clone https://github.com/your-username/leetfetch-obsidian.git
-cd leetfetch-obsidian
-
-# Install dependencies
+git clone https://github.com/yash4agr/leetfetch.git
+cd leetfetch
 npm install
-
-# Start development
-npm run dev
-
-# Build for production
 npm run build
 ```
 
-## 📚 FAQ
+## Roadmap
 
-**Q: Do I need a LeetCode Premium account?**
-A: No! The plugin works with free LeetCode accounts. Premium features may require a session token.
+**Planned Features**:
+- Support for additional platforms (HackerRank, Codeforces)
+- Enhanced analytics and progress visualization  
 
-**Q: How often should I sync?**
-A: It depends on your solving frequency. Daily active users might sync every hour, while occasional users might sync manually.
+## License
 
-**Q: Can I customize the problem log format?**
-A: Yes! Edit the table format in the writer.ts file or request this as a configurable feature.
+MIT License - see LICENSE file for details.
 
-**Q: Does this work with other coding platforms?**
-A: Currently LeetCode only, but we're planning support for HackerRank, Codeforces, and others.
+## Support
 
-**Q: Is my data secure?**
-A: Yes! All data is stored locally in your vault. Session tokens are only used for API calls.
-
-## 🛣️ Roadmap
-
-- [ ] **Multi-platform Support**: HackerRank, Codeforces, AtCoder
-- [ ] **Enhanced Analytics**: Detailed progress tracking and insights
-- [ ] **Template Library**: Pre-made templates for different use cases
-- [ ] **Contest Integration**: Track contest participation and rankings
-- [ ] **Collaboration Features**: Share progress with study groups
-- [ ] **Mobile Optimization**: Better mobile experience
-- [ ] **AI Integration**: Smart problem recommendations
-
-## 📄 License
-
-MIT License - feel free to use, modify, and distribute!
-
-## 🙏 Acknowledgments
-
-- Thanks to the Obsidian community for their amazing plugin ecosystem
-- LeetCode for providing the platform that makes this possible
-- All contributors and users who help improve LeetFetch
+- **Issues**: Report bugs on [GitHub Issues](https://github.com/yash4agr/leetfetch/issues)
+- **Discussions**: Share ideas in [GitHub Discussions](https://github.com/yash4agr/leetfetch/discussions)
+- **Documentation**: Check the [Wiki](https://github.com/yash4agr/leetfetch/wiki) for detailed guides
 
 ---
 
-**Happy coding! 🎉**
-
-*If you find LeetFetch useful, please consider starring the repository and sharing it with your coding friends!*
+If you find LeetFetch helpful, please consider starring the repository and sharing with fellow developers!
