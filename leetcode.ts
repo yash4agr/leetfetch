@@ -57,7 +57,7 @@ export class LeetCodeAPI {
 	private readonly baseURL = "https://leetcode.com";
 	private readonly graphqlURL = "https://leetcode.com/graphql";
 	private processedQuestionIds: Set<number> = new Set();
-	
+
 	// Rate limiting
 	private lastRequestTime = 0;
 	private readonly MIN_REQUEST_INTERVAL = 100; // 100ms between requests
@@ -139,8 +139,6 @@ export class LeetCodeAPI {
 				console.error('Error processing log file:', error instanceof Error ? error.message : error);
 			}
 		}
-
-		console.log(`Loaded ${this.processedQuestionIds.size} processed question IDs`);
 	}
 
 	private isQuestionProcessed(questionId: number): boolean {
@@ -164,74 +162,12 @@ export class LeetCodeAPI {
 	}
 
 	/**
-	 * Attempts to fetch CSRF token from LeetCode's main page
-	 * This is a fallback method - users should provide their own token
-	 */
-	private async fetchCSRFToken(): Promise<string | null> {
-		try {
-			const response = await requestUrl({
-				url: this.baseURL,
-				method: 'GET',
-				headers: {
-					'User-Agent': 'Mozilla/5.0 (compatible; LeetFetch/1.0)',
-				},
-				throw: false,
-			});
-
-			console.log('📥 CSRF Token Response:', {
-				status: response.status,
-				statusText: response.status === 200 ? 'OK' : 'Error',
-				headers: response.headers,
-				textLength: response.text?.length || 0,
-				textPreview: response.text?.substring(0, 200) + '...'
-			});
-
-			if (response.status !== 200) {
-				console.warn('Failed to fetch CSRF token from main page');
-				return null;
-			}
-
-			// Look for CSRF token in response
-			const csrfMatch = response.text.match(/csrf[Tt]oken['"]\s*:\s*['"]([^'"]+)['"]/);
-			if (csrfMatch) {
-				return csrfMatch[1];
-			}
-
-			// Alternative pattern
-			const metaCsrfMatch = response.text.match(/<meta\s+name=['"]csrf-token['"]\s+content=['"]([^'"]+)['"]/i);
-			if (metaCsrfMatch) {
-				return metaCsrfMatch[1];
-			}
-
-			console.warn('CSRF token not found in page content');
-			return null;
-		} catch (error) {
-			console.warn('Error fetching CSRF token:', error);
-			return null;
-		}
-	}
-
-	/**
-	 * Gets current CSRF token, fetching if necessary
+	 * Gets current CSRF token, if available.
 	 */
 	private async getCSRFToken(): Promise<string | null> {
 		// Use user-provided token first
 		if (this.settings.csrfToken?.trim()) {
 			return this.settings.csrfToken.trim();
-		}
-
-		// Check if we have a cached token that's still valid
-		const now = Date.now();
-		if (this.csrfToken && this.csrfTokenExpiry > now) {
-			return this.csrfToken;
-		}
-
-		// Try to fetch a new token
-		const fetchedToken = await this.fetchCSRFToken();
-		if (fetchedToken) {
-			this.csrfToken = fetchedToken;
-			this.csrfTokenExpiry = now + (30 * 60 * 1000); // Valid for 30 minutes
-			return fetchedToken;
 		}
 
 		return null;
@@ -263,7 +199,7 @@ export class LeetCodeAPI {
 				// Calculate delay with exponential backoff and jitter
 				const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
 				console.warn(`API request failed (attempt ${attempt + 1}/${maxRetries + 1}): ${lastError.message}. Retrying in ${Math.round(delay)}ms`);
-				
+
 				await this.sleep(delay);
 			}
 		}
@@ -310,18 +246,7 @@ export class LeetCodeAPI {
 					headers["Cookie"] = `csrftoken=${csrfToken}`;
 				}
 			}
-			
-			// Log the request details
-			console.log('🚀 Making GraphQL Request:', {
-				url: this.graphqlURL,
-				method: 'POST',
-				headers: {
-					...headers,
-					'Cookie': headers.Cookie ? headers.Cookie : undefined
-				},
-				query: query,
-				variables: variables
-			});
+
 
 			try {
 				const response = await requestUrl({
@@ -335,17 +260,7 @@ export class LeetCodeAPI {
 					throw: false,
 				});
 
-				// Log the complete response regardless of status
-				console.log('📥 GraphQL API Response:', {
-					status: response.status,
-					statusText: response.status >= 200 && response.status < 300 ? 'Success' : 'Error',
-					headers: response.headers,
-					textLength: response.text?.length || 0,
-					responseText: response.text || 'No response text',
-					timestamp: new Date().toISOString()
-				});
-
-				// Additional detailed logging for error responses
+				// Log full response on errors for debugging
 				if (response.status >= 400) {
 					console.error('❌ Error Response Details:', {
 						status: response.status,
@@ -355,8 +270,6 @@ export class LeetCodeAPI {
 					});
 				}
 
-
-
 				// Handle different HTTP status codes
 				if (response.status === 403) {
 					const responseText = response.text?.toLowerCase() || '';
@@ -364,7 +277,7 @@ export class LeetCodeAPI {
 						// Clear cached CSRF token on CSRF failure
 						this.csrfToken = null;
 						this.csrfTokenExpiry = 0;
-						
+
 						throw new LeetCodeAPIError(
 							'CSRF verification failed. Please provide a valid CSRF token in plugin settings or try again.',
 							'CSRF',
@@ -372,7 +285,7 @@ export class LeetCodeAPI {
 							true
 						);
 					}
-					
+
 					throw new LeetCodeAPIError(
 						'Authentication failed. Please check your session token and CSRF token.',
 						'AUTH',
@@ -380,7 +293,7 @@ export class LeetCodeAPI {
 						false
 					);
 				}
-				
+
 				if (response.status === 429) {
 					throw new LeetCodeAPIError(
 						'Rate limited by LeetCode. Please wait before retrying.',
@@ -430,10 +343,10 @@ export class LeetCodeAPI {
 				}
 
 				if (data.errors) {
-					const errorMessage = Array.isArray(data.errors) 
+					const errorMessage = Array.isArray(data.errors)
 						? data.errors.map((e: any) => e.message || e.toString()).join('; ')
 						: data.errors.toString();
-					
+
 					// Check for specific GraphQL errors
 					if (errorMessage.includes('User not found')) {
 						throw new LeetCodeAPIError(
@@ -640,15 +553,15 @@ export class LeetCodeAPI {
 			console.warn(`Failed to fetch ${failedProblems.length} problem details out of ${data.recentAcSubmissionList.length} submissions`);
 		}
 
-    return problems.sort((a, b) => b.timestamp - a.timestamp);
-}
+		return problems.sort((a, b) => b.timestamp - a.timestamp);
+	}
 
 	async fetchAllSubmissions(): Promise<LeetCodeProblem[]> {
 		if (!this.settings.sessionToken?.trim()) {
 			console.warn("Session token required for all submissions, falling back to recent submissions");
 			return this.fetchRecentSubmissions(false, 100);
 		}
-		console.log("Fetching all submissions for user:", this.settings.username);
+
 		const query = `
 			query getSubmissions($offset: Int!, $limit: Int!, $lastKey: String) {
 				submissionList(offset: $offset, limit: $limit, lastKey: $lastKey) {
@@ -680,30 +593,30 @@ export class LeetCodeAPI {
 		let consecutiveFailures = 0;
 		const maxConsecutiveFailures = 3;
 		let totalProcessed = 0;
-		const maxProblems = 3500; // Privacy: Limit total problems to prevent excessive data collection
+		const maxProblems = 5000; // Limit total problems 
 
 		while (hasNext && consecutiveFailures < maxConsecutiveFailures && totalProcessed < maxProblems) {
 			try {
-				const data: any = await this.makeGraphQLRequest(query, { 
-					offset, 
-					limit, 
-					lastKey 
+				const data: any = await this.makeGraphQLRequest(query, {
+					offset,
+					limit,
+					lastKey
 				});
-				
+
 				const page: any = data.submissionList;
-				console.log(`Fetched submission batch: offset=${offset}, limit=${limit}, submissions=${page?.submissions?.length || 0}, hasNext=${page?.hasNext}, lastKey=${page?.lastKey}`);
+
 				if (!page?.submissions) {
 					console.warn('No submissions found in response page');
 					break;
 				}
 
 				consecutiveFailures = 0; // Reset on successful request
-				console.log(`Fetched ${page.submissions.length} submissions from batch`);
+
 				// Process only if accepted submissions
 				const acceptedSubmissions = page.submissions.filter(
 					(sub: any) => sub.statusDisplay === "Accepted"
-            );
-			console.log(`Processing ${acceptedSubmissions.length} accepted submissions from batch`);
+				);
+
 				for (const sub of acceptedSubmissions) {
 					if (!processedTitleSlugs.has(sub.titleSlug)) {
 						try {
@@ -738,15 +651,10 @@ export class LeetCodeAPI {
 					await this.sleep(500);
 				}
 
-				// Progress logging for large operations
-				if (totalProcessed > 0 && totalProcessed % 100 === 0) {
-					console.log(`Processed ${totalProcessed} problems so far...`);
-				}
-
 			} catch (error) {
 				consecutiveFailures++;
 				console.error(`Failed to fetch submission batch (attempt ${consecutiveFailures}/${maxConsecutiveFailures}):`, error);
-				
+
 				if (consecutiveFailures >= maxConsecutiveFailures) {
 					throw new LeetCodeAPIError(
 						`Failed to fetch submissions after ${maxConsecutiveFailures} consecutive failures. Last error: ${error instanceof Error ? error.message : error}`,
@@ -762,7 +670,7 @@ export class LeetCodeAPI {
 		}
 
 		if (totalProcessed >= maxProblems) {
-        console.warn(`Reached maximum problem limit (${maxProblems}) for privacy protection`);
+			console.warn(`Reached maximum problem limit (${maxProblems}) for privacy protection`);
 		}
 
 		if (failedProblems.length > 0) {
@@ -883,7 +791,7 @@ export class LeetCodeAPI {
 
 	private cleanDescription(html: string): string {
 		if (!html) return "";
-		
+
 		return html
 			.replace(/<[^>]*>/g, "")
 			.replace(/&lt;/g, "<")
@@ -939,8 +847,8 @@ export class LeetCodeAPI {
 			await this.fetchUserProfile();
 			return { healthy: true, message: "API connection successful" };
 		} catch (error) {
-			const message = error instanceof LeetCodeAPIError 
-				? error.message 
+			const message = error instanceof LeetCodeAPIError
+				? error.message
 				: `API health check failed: ${error instanceof Error ? error.message : error}`;
 			return { healthy: false, message };
 		}
