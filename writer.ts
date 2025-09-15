@@ -86,8 +86,8 @@ export class ProblemLogWriter {
     async updateProblemBase(problems: LeetCodeProblem[]): Promise<LeetCodeProblem[]> {
         // Get existing problem IDs to avoid duplicates
         const existingProblemIds = await this.baseManager.getExistingProblemIds();
-        console.log(`Existing problems in base: ${existingProblemIds.size}`);
-        console.log(`Total fetched problems: ${problems.length}`);
+        // console.log(`Existing problems in base: ${existingProblemIds.size}`);
+        // console.log(`Total fetched problems: ${problems.length}`);
 
         // Filter out already processed problems
         const newProblems = problems.filter(p =>
@@ -95,7 +95,7 @@ export class ProblemLogWriter {
             !this.processedProblems.has(p.titleSlug)
         );
 
-        console.log(`Found ${newProblems.length} new problems to process.`);
+        // console.log(`Found ${newProblems.length} new problems to process.`);
 
         if (newProblems.length === 0) {
             return [];
@@ -127,7 +127,7 @@ export class ProblemLogWriter {
             // Update problems in the base (ensures frontmatter is standardized)
             await this.baseManager.batchUpdateProblems(newProblems);
 
-            console.log(`Updated ${newProblems.length} problems in Bases format`);
+            // console.log(`Updated ${newProblems.length} problems in Bases format`);
             new Notice(`Added ${newProblems.length} new problems to your LeetCode base!`);
         } catch (error) {
             console.error("Error updating Bases format:", error);
@@ -171,7 +171,7 @@ export class ProblemLogWriter {
             await this.createTopicBacklinks(problem);
         }
 
-        console.log(`Created note: ${filePath}`);
+        // console.log(`Created note: ${filePath}`);
     }
 
     private sanitizeFileName(title: string): string {
@@ -305,7 +305,7 @@ ${backlink}
 
             if (validation.valid) {
                 new Notice("Base integrity validation passed!");
-                console.log("Base integrity validation: PASSED");
+                // console.log("Base integrity validation: PASSED");
             } else {
                 new Notice(`Base validation found ${validation.issues.length} issues. Check console for details.`);
                 console.warn("Base integrity validation issues:", validation.issues);
