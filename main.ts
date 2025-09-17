@@ -738,9 +738,13 @@ class LeetFetchSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 
 						// Show/hide interval setting
-						const intervalSetting = containerEl.querySelector('.sync-interval-setting') as HTMLElement;
+						const intervalSetting = containerEl.querySelector('.leetfetch-sync-interval');
 						if (intervalSetting) {
-							intervalSetting.style.display = value ? 'flex' : 'none';
+							if (value) {
+								intervalSetting.removeClass('hidden');
+							} else {
+								intervalSetting.addClass('hidden');
+							}
 						}
 					})
 			);
@@ -769,8 +773,10 @@ class LeetFetchSettingTab extends PluginSettingTab {
 
 		// Add class for dynamic show/hide
 		intervalSetting.settingEl.addClass('sync-interval-setting');
-		intervalSetting.settingEl.style.display = this.plugin.settings.autoSync ? 'flex' : 'none';
-
+		if (!this.plugin.settings.autoSync) {
+			intervalSetting.settingEl.addClass('hidden');
+		}
+		
 		// Add current interval display
 		const intervalDisplay = intervalSetting.settingEl.createDiv({ cls: "setting-item-description" });
 		const currentInterval = this.plugin.settings.syncInterval;

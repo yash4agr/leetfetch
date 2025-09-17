@@ -1,8 +1,129 @@
-/*
+/* LeetFetch Plugin Styles */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* Sync interval conditional visibility */
+.leetfetch-sync-interval.hidden {
+    display: none !important;
+}
 
-If your plugin does not need CSS, delete this file.
+/* Actions section styling */
+.leetfetch-actions {
+    margin-top: 1rem;
+}
 
-*/
+.leetfetch-actions .setting-item {
+    border: none;
+    padding: 0.5rem 0;
+}
+
+.leetfetch-actions .setting-item-control {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.leetfetch-actions button {
+    min-width: 80px;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.leetfetch-actions button:hover {
+    background: var(--background-modifier-hover);
+}
+
+.leetfetch-actions button.mod-cta {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+.leetfetch-actions button.mod-cta:hover {
+    background: var(--interactive-accent-hover);
+    border-color: var(--interactive-accent-hover);
+}
+
+/* Settings section spacing */
+.leetfetch-settings h2 {
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    color: var(--text-accent);
+    font-weight: 600;
+}
+
+.leetfetch-settings h2:first-of-type {
+    margin-top: 1rem;
+}
+
+/* Token input styling for better security indication */
+.leetfetch-token-input {
+    font-family: var(--font-monospace);
+    letter-spacing: 0.5px;
+}
+
+/* Help section styling */
+.leetfetch-help {
+    background: var(--background-secondary);
+    padding: 1rem;
+    border-radius: 6px;
+    margin-top: 0.5rem;
+}
+
+.leetfetch-help h4 {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-accent);
+}
+
+.leetfetch-help h4:first-child {
+    margin-top: 0;
+}
+
+.leetfetch-help ol {
+    margin-left: 1rem;
+    margin-bottom: 1rem;
+}
+
+.leetfetch-help li {
+    margin-bottom: 0.3rem;
+}
+
+.leetfetch-warning {
+    background: var(--background-modifier-error-hover);
+    border-left: 3px solid var(--text-error);
+    padding: 0.8rem;
+    margin-top: 1rem;
+    border-radius: 0 4px 4px 0;
+}
+
+/* Advanced settings collapsible */
+.leetfetch-advanced summary {
+    cursor: pointer;
+    padding: 0.5rem 0;
+    font-weight: 600;
+    color: var(--text-accent);
+}
+
+.leetfetch-advanced summary:hover {
+    color: var(--text-normal);
+}
+
+.leetfetch-advanced[open] summary {
+    margin-bottom: 1rem;
+}
+
+/* Responsive button layout */
+@media (max-width: 600px) {
+    .leetfetch-actions .setting-item-control {
+        flex-direction: column;
+    }
+    
+    .leetfetch-actions button {
+        width: 100%;
+        min-width: unset;
+    }
+}
