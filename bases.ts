@@ -217,8 +217,8 @@ export class BaseManager {
         for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
             const batch = filePaths.slice(i, i + BATCH_SIZE);
             await Promise.all(batch.map(async (path) => {
-                const file = this.app.vault.getAbstractFileByPath(path) as TFile;
-                if (file) {
+                const file = this.app.vault.getAbstractFileByPath(path);
+                if (file instanceof TFile) {
                     await this.updateSingleFile(file);
                 }
             }));

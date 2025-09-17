@@ -256,9 +256,10 @@ notes_link: "[[${this.sanitizeFileName(problem.title)}]]"
     }
 
     private async addToTopicFile(filePath: string, topic: string, backlink: string): Promise<void> {
-        let file = this.app.vault.getAbstractFileByPath(filePath) as TFile;
+        let abstractFile = this.app.vault.getAbstractFileByPath(filePath);
+        let file: TFile;
 
-        if (!file) {
+        if (!(abstractFile instanceof TFile)) {
             const initialContent = `# ${topic}
 
 ## Problems
@@ -275,6 +276,7 @@ ${backlink}
 `;
             file = await this.app.vault.create(filePath, initialContent);
         } else {
+            file = abstractFile;
             const content = await this.app.vault.read(file);
 
             // Check if backlink already exists
