@@ -86,16 +86,12 @@ export class ProblemLogWriter {
     async updateProblemBase(problems: LeetCodeProblem[]): Promise<LeetCodeProblem[]> {
         // Get existing problem IDs to avoid duplicates
         const existingProblemIds = await this.baseManager.getExistingProblemIds();
-        // console.log(`Existing problems in base: ${existingProblemIds.size}`);
-        // console.log(`Total fetched problems: ${problems.length}`);
 
         // Filter out already processed problems
         const newProblems = problems.filter(p =>
             !existingProblemIds.has(p.id) &&
             !this.processedProblems.has(p.titleSlug)
         );
-
-        // console.log(`Found ${newProblems.length} new problems to process.`);
 
         if (newProblems.length === 0) {
             return [];
@@ -127,7 +123,6 @@ export class ProblemLogWriter {
             // Update problems in the base (ensures frontmatter is standardized)
             await this.baseManager.batchUpdateProblems(newProblems);
 
-            // console.log(`Updated ${newProblems.length} problems in Bases format`);
             new Notice(`Added ${newProblems.length} new problems to your LeetCode base!`);
         } catch (error) {
             console.error("Error updating Bases format:", error);
@@ -159,7 +154,6 @@ export class ProblemLogWriter {
         // Check if file already exists
         const existingFile = this.app.vault.getAbstractFileByPath(filePath);
         if (existingFile) {
-            console.log(`Note for ${problem.title} already exists, skipping creation`);
             return;
         }
 
@@ -170,8 +164,6 @@ export class ProblemLogWriter {
         if (this.settings.topicTagsEnabled && this.settings.topicBacklinkEnabled) {
             await this.createTopicBacklinks(problem);
         }
-
-        // console.log(`Created note: ${filePath}`);
     }
 
     private sanitizeFileName(title: string): string {
@@ -307,7 +299,6 @@ ${backlink}
 
             if (validation.valid) {
                 new Notice("Base integrity validation passed!");
-                // console.log("Base integrity validation: PASSED");
             } else {
                 new Notice(`Base validation found ${validation.issues.length} issues. Check console for details.`);
                 console.warn("Base integrity validation issues:", validation.issues);
@@ -338,7 +329,6 @@ ${backlink}
             // Clear processed problems if the folder doesn't exist
             const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
             if (!folder) {
-                console.log("Problems folder doesn't exist, clearing processed problems cache");
                 this.processedProblems.clear();
                 await this.saveProcessedProblems();
             }
@@ -393,6 +383,5 @@ Please check your plugin configuration and try again.`;
     clearProcessedProblems(): void {
         this.processedProblems.clear();
         this.saveProcessedProblems();
-        console.log("Cleared processed problems cache.");
     }
 }

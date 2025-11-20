@@ -151,8 +151,6 @@ export default class LeetFetchPlugin extends Plugin {
 		if (this.settings.autoSync) {
 			this.setupAutoSync();
 		}
-
-		console.log("LeetFetch Plugin loaded successfully!");
 	}
 
 	async syncProblems() {
@@ -378,7 +376,6 @@ export default class LeetFetchPlugin extends Plugin {
 			baseManager.clearCache();
 
 			new Notice("Cache cleared successfully! Next sync will reprocess all problems.");
-			console.log("All caches cleared - next sync will reprocess problems");
 		} catch (error) {
 			console.error("Error clearing cache:", error);
 			new Notice(`Error clearing cache: ${error.message}`);
@@ -422,7 +419,6 @@ export default class LeetFetchPlugin extends Plugin {
 		if (this.syncInterval) {
 			clearInterval(this.syncInterval);
 		}
-		console.log("LeetFetch Plugin unloaded successfully!");
 	}
 }
 
@@ -776,7 +772,7 @@ class LeetFetchSettingTab extends PluginSettingTab {
 		if (!this.plugin.settings.autoSync) {
 			intervalSetting.settingEl.addClass('hidden');
 		}
-		
+
 		// Add current interval display
 		const intervalDisplay = intervalSetting.settingEl.createDiv({ cls: "setting-item-description" });
 		const currentInterval = this.plugin.settings.syncInterval;

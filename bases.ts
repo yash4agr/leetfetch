@@ -188,8 +188,8 @@ export class BaseManager {
     }
 
     private isProblemFile(file: TFile): boolean {
-        return file.path.startsWith(this.settings.individualNotesPath) && 
-               file.extension === 'md';
+        return file.path.startsWith(this.settings.individualNotesPath) &&
+            file.extension === 'md';
     }
 
     private queueUpdate(filePath: string): void {
@@ -199,7 +199,7 @@ export class BaseManager {
 
     private async processUpdateQueue(): Promise<void> {
         if (this.isUpdating || this.updateQueue.size === 0) return;
-        
+
         this.isUpdating = true;
         const updates = Array.from(this.updateQueue);
         this.updateQueue.clear();
@@ -213,7 +213,7 @@ export class BaseManager {
 
     private async batchProcessFiles(filePaths: string[]): Promise<void> {
         const BATCH_SIZE = 20;
-        
+
         for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
             const batch = filePaths.slice(i, i + BATCH_SIZE);
             await Promise.all(batch.map(async (path) => {
@@ -236,14 +236,14 @@ export class BaseManager {
     private async getCachedContent(file: TFile): Promise<CacheEntry> {
         const mtime = file.stat.mtime;
         const cached = this.cache.get(file.path);
-        
+
         if (cached && cached.mtime === mtime) {
             return cached;
         }
-        
+
         const content = await this.app.vault.read(file);
         const frontmatter = this.parseFrontmatter(content);
-        
+
         const entry: CacheEntry = { content, frontmatter, mtime };
         this.cache.set(file.path, entry);
         return entry;
@@ -252,9 +252,9 @@ export class BaseManager {
     private parseFrontmatter(content: string): Record<string, any> {
         const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
         const match = content.match(frontmatterRegex);
-        
+
         if (!match) return {};
-        
+
         try {
             return parseYaml(match[1]) || {};
         } catch (error) {
@@ -268,13 +268,13 @@ export class BaseManager {
      */
     async createOrUpdateBase(): Promise<void> {
         const baseFilePath = this.getBaseFilePath();
-        
+
         try {
             await this.ensureDirectory(this.getDirectoryPath(baseFilePath));
-            
+
             const baseContent = this.generateBaseContent();
             const existingFile = this.app.vault.getAbstractFileByPath(baseFilePath);
-            
+
             if (existingFile instanceof TFile) {
                 // Only update if content has changed
                 const currentContent = await this.app.vault.read(existingFile);
@@ -327,16 +327,16 @@ export class BaseManager {
 
         for (let i = 0; i < problems.length; i += BATCH_SIZE) {
             const batch = problems.slice(i, i + BATCH_SIZE);
-            const batchPromises = batch.map(problem => 
+            const batchPromises = batch.map(problem =>
                 this.updateProblemInBase(problem).catch(error => {
                     console.error(`Failed to update ${problem.title}:`, error);
                     return { success: false, problem: problem.title, error: error.message };
                 })
             );
-            
+
             const batchResults = await Promise.allSettled(batchPromises);
             results.push(...batchResults);
-            
+
             // Small delay between batches to prevent overwhelming the file system
             if (i + BATCH_SIZE < problems.length) {
                 await new Promise(resolve => setTimeout(resolve, 100));
@@ -346,8 +346,6 @@ export class BaseManager {
         const successful = results.filter(r => r.status === 'fulfilled').length;
         const failed = results.length - successful;
 
-        // console.log(`Batch update completed: ${successful} successful, ${failed} failed`);
-        
         if (successful > 0) {
             new Notice(`Updated ${successful} problems${failed > 0 ? ` (${failed} failed)` : ''}`);
         }
@@ -378,7 +376,7 @@ export class BaseManager {
             difficulty: problem.difficulty,
             topics: problem.topics,
             status: problem.status,
-            date_solved: problem.timestamp ? 
+            date_solved: problem.timestamp ?
                 new Date(problem.timestamp * 1000).toISOString().split('T')[0] : null,
             url: problem.url,
             language: problem.language || 'python',
@@ -400,7 +398,7 @@ export class BaseManager {
     async validateBaseIntegrity(): Promise<{ valid: boolean; issues: string[] }> {
         const issues: string[] = [];
         const files = await this.getProblemsInFolder();
-        
+
         // Process in chunks to manage memory
         const CHUNK_SIZE = 50;
         for (let i = 0; i < files.length; i += CHUNK_SIZE) {
@@ -408,7 +406,7 @@ export class BaseManager {
             const results = await Promise.allSettled(
                 chunk.map(file => this.validateProblemNote(file))
             );
-            
+
             results.forEach((result, index) => {
                 if (result.status === 'fulfilled' && !result.value.valid) {
                     issues.push(`${chunk[index].path}: ${result.value.issues.join(', ')}`);
@@ -423,11 +421,11 @@ export class BaseManager {
 
     private async validateProblemNote(file: TFile): Promise<{ valid: boolean; issues: string[] }> {
         const issues: string[] = [];
-        
+
         try {
             const cached = await this.getCachedContent(file);
             const requiredFields = ['problem_id', 'title', 'difficulty', 'status'];
-            
+
             for (const field of requiredFields) {
                 if (!(field in cached.frontmatter)) {
                     issues.push(`Missing required field: ${field}`);
@@ -458,12 +456,11 @@ export class BaseManager {
      */
     async getExistingProblemIds(): Promise<Set<number>> {
         const ids = new Set<number>();
-        
+
         try {
             // First check if the directory exists
             const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
             if (!folder) {
-                // console.log("Individual notes folder doesn't exist, returning empty set");
                 return ids;
             }
 
@@ -471,7 +468,6 @@ export class BaseManager {
 
             // If no files exist, return empty set
             if (files.length === 0) {
-                // console.log("No problem files found in folder, returning empty set");
                 return ids;
             }
 
@@ -480,11 +476,11 @@ export class BaseManager {
             const BATCH_SIZE = 50;
             for (let i = 0; i < files.length; i += BATCH_SIZE) {
                 const batch = files.slice(i, i + BATCH_SIZE);
-                
+
                 const batchResults = await Promise.allSettled(
                     batch.map(file => this.getCachedContent(file))
                 );
-                
+
                 batchResults.forEach((result, index) => {
                     if (result.status === 'fulfilled') {
                         const problemId = result.value.frontmatter.problem_id;
@@ -496,12 +492,11 @@ export class BaseManager {
                     }
                 });
             }
-            
-            // console.log(`Found ${ids.size} existing problem IDs`);
+
         } catch (error) {
             console.warn("Error retrieving existing problem IDs:", error);
         }
-        
+
         return ids;
     }
 
@@ -523,7 +518,6 @@ export class BaseManager {
             const folder = this.app.vault.getAbstractFileByPath(dirPath);
             if (!folder) {
                 await this.app.vault.createFolder(dirPath);
-                // console.log(`Created directory: ${dirPath}`);
             }
         } catch (error) {
             console.error(`Failed to create directory ${dirPath}:`, error);
@@ -542,21 +536,21 @@ export class BaseManager {
 
             // Get all markdown files in the problems folder
             const allFiles = this.app.vault.getMarkdownFiles();
-            const problemFiles = allFiles.filter(file => 
-            file.path.startsWith(this.settings.individualNotesPath + '/') &&
-            file.extension === 'md'
+            const problemFiles = allFiles.filter(file =>
+                file.path.startsWith(this.settings.individualNotesPath + '/') &&
+                file.extension === 'md'
             );
-        
+
             return problemFiles;
         } catch (error) {
             console.error("Error getting problems in folder:", error);
             return files;
         }
-    } 
+    }
 
     // Clear all cached data
     clearCache(): void {
-        this.cache.clear();    
+        this.cache.clear();
     }
 
     // Clean up resources
