@@ -1,11 +1,11 @@
-import { App, TFile, Notice } from 'obsidian';
+import { App, TFile, TFolder, Notice, normalizePath } from 'obsidian';
 import { LeetCodeProblem } from './leetcode';
 import { BaseManager } from './bases';
 
 // Default template for individual problem notes
 const DEFAULT_NOTE_TEMPLATE = `# {{title}}
 
-## Problem Statement
+## Problem statement
 
 [View on LeetCode]({{url}})
 
@@ -20,7 +20,7 @@ const DEFAULT_NOTE_TEMPLATE = `# {{title}}
 
 ## Approach
 
-## Time & Space Complexity
+## Time & space complexity
 
 - **Time:** O(?)
 - **Space:** O(?)
@@ -28,10 +28,6 @@ const DEFAULT_NOTE_TEMPLATE = `# {{title}}
 ## Notes
 
 `;
-
-function normalizePath(path: string): string {
-    return path.replace(/\\/g, '/').replace(/\/+/g, '/');
-}
 
 /**
  * Handles writing LeetCode problems to individual notes and managing Base integration
@@ -51,7 +47,6 @@ export class ProblemLogWriter {
         this.baseManager = new BaseManager(app, settings);
         this.loadProcessedProblems();
         this.loadNoteTemplate();
-
     }
 
     updateSettings(settings: any): void {
@@ -69,7 +64,7 @@ export class ProblemLogWriter {
         try {
             const templateFile = this.app.vault.getAbstractFileByPath(this.settings.noteTemplatePath);
             if (templateFile instanceof TFile) {
-                this.noteTemplate = await this.app.vault.read(templateFile);
+                this.noteTemplate = await this.app.vault.cachedRead(templateFile);
             } else {
                 console.warn(`Template file not found: ${this.settings.noteTemplatePath}. Using default template.`);
                 this.noteTemplate = DEFAULT_NOTE_TEMPLATE;
@@ -114,19 +109,12 @@ export class ProblemLogWriter {
 
     private async updateBasesFormat(newProblems: LeetCodeProblem[]): Promise<void> {
         try {
-            // Ensure base file exists and is up to date
             await this.baseManager.createOrUpdateBase();
-
-            // Create individual problem notes with standardized frontmatter
             await this.createIndividualNotes(newProblems);
-
-            // Update problems in the base (ensures frontmatter is standardized)
             await this.baseManager.batchUpdateProblems(newProblems);
-
-            new Notice(`Added ${newProblems.length} new problems to your LeetCode base!`);
+            
         } catch (error) {
             console.error("Error updating Bases format:", error);
-            new Notice(`Error updating problems: ${error.message}`);
             throw error;
         }
     }
@@ -153,7 +141,7 @@ export class ProblemLogWriter {
 
         // Check if file already exists
         const existingFile = this.app.vault.getAbstractFileByPath(filePath);
-        if (existingFile) {
+        if (existingFile instanceof TFile) {
             return;
         }
 
@@ -248,8 +236,7 @@ notes_link: "[[${this.sanitizeFileName(problem.title)}]]"
     }
 
     private async addToTopicFile(filePath: string, topic: string, backlink: string): Promise<void> {
-        let abstractFile = this.app.vault.getAbstractFileByPath(filePath);
-        let file: TFile;
+        const abstractFile = this.app.vault.getAbstractFileByPath(filePath);
 
         if (!(abstractFile instanceof TFile)) {
             const initialContent = `# ${topic}
@@ -263,13 +250,12 @@ ${backlink}
 ## Patterns
 - 
 
-## Related Topics
+## Related topics
 - 
 `;
-            file = await this.app.vault.create(filePath, initialContent);
+            await this.app.vault.create(filePath, initialContent);
         } else {
-            file = abstractFile;
-            const content = await this.app.vault.read(file);
+            const content = await this.app.vault.cachedRead(abstractFile);
 
             // Check if backlink already exists
             if (content.includes(backlink)) {
@@ -277,16 +263,17 @@ ${backlink}
             }
 
             // Add backlink under Problems section
-            const lines = content.split('\n');
-            const problemsIndex = lines.findIndex(line => line.includes('## Problems'));
+            await this.app.vault.process(abstractFile, (currentContent) => {
+                const lines = currentContent.split('\n');
+                const problemsIndex = lines.findIndex(line => line.includes('## Problems'));
 
-            if (problemsIndex !== -1) {
-                lines.splice(problemsIndex + 1, 0, backlink);
-                await this.app.vault.modify(file, lines.join('\n'));
-            } else {
-                // Append to end
-                await this.app.vault.modify(file, content + '\n' + backlink);
-            }
+                if (problemsIndex !== -1) {
+                    lines.splice(problemsIndex + 1, 0, backlink);
+                    return lines.join('\n');
+                } else {
+                    return currentContent + '\n' + backlink;
+                }
+            });
         }
     }
 
@@ -305,7 +292,7 @@ ${backlink}
             }
         } catch (error) {
             console.error("Error validating base integrity:", error);
-            new Notice(`Error validating base: ${error.message}`);
+            new Notice(`Error validating base: ${(error as Error).message}`);
         }
     }
 
@@ -313,7 +300,7 @@ ${backlink}
         const normalizedPath = normalizePath(dirPath);
         const folder = this.app.vault.getAbstractFileByPath(normalizedPath);
 
-        if (!folder) {
+        if (!(folder instanceof TFolder)) {
             await this.app.vault.createFolder(normalizedPath);
         }
     }
@@ -328,7 +315,7 @@ ${backlink}
 
             // Clear processed problems if the folder doesn't exist
             const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
-            if (!folder) {
+            if (!(folder instanceof TFolder)) {
                 this.processedProblems.clear();
                 await this.saveProcessedProblems();
             }
@@ -356,25 +343,25 @@ ${backlink}
             // Get existing problem IDs to calculate stats
             const existingIds = await this.baseManager.getExistingProblemIds();
 
-            return `# LeetCode Progress Report
+            return `# LeetCode progress report
 
 *Generated: ${new Date().toISOString().split('T')[0]}*
 
 ## Overview
-- **Total Problems Solved:** ${existingIds.size}
-- **Base File Path:** ${this.settings.baseFilePath}
-- **Individual Notes Path:** ${this.settings.individualNotesPath}
+- **Total problems solved:** ${existingIds.size}
+- **Base file path:** ${this.settings.baseFilePath}
+- **Individual notes path:** ${this.settings.individualNotesPath}
 
 ---
 *Generated by LeetFetch Plugin*`;
         } catch (error) {
             console.error("Error generating stats report:", error);
-            return `# LeetCode Progress Report
+            return `# LeetCode progress report
 
 *Generated: ${new Date().toISOString().split('T')[0]}*
 
 ## Error
-Could not generate detailed statistics: ${error.message}
+Could not generate detailed statistics: ${(error as Error).message}
 
 Please check your plugin configuration and try again.`;
         }
