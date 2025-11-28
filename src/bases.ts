@@ -201,7 +201,7 @@ export class BaseManager {
         }
     }
 
-    private async batchProcessFiles(filePaths: string[]): Promise<void> {
+    private batchProcessFiles(filePaths: string[]): void {
         const BATCH_SIZE = 20;
 
         for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
