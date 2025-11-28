@@ -174,7 +174,7 @@ export default class LeetFetchPlugin extends Plugin {
 
 			let problems;
 			if (shouldFetchAll) {
-				notice.setMessage("Fetching all submissions...");
+				notice.setMessage("Fetching all submissions (this may take a while)...");
 				problems = await this.leetcodeAPI.fetchAllSubmissions();
 			} else {
 				problems = await this.leetcodeAPI.fetchRecentSubmissions();
