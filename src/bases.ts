@@ -1,11 +1,5 @@
-import { App, TFile, Notice, parseYaml, stringifyYaml } from 'obsidian';
+import { App, TFile, TFolder, Notice, stringifyYaml, debounce, normalizePath, EventRef } from 'obsidian';
 import { LeetCodeProblem } from './leetcode';
-
-interface CacheEntry {
-    content: string;
-    frontmatter: Record<string, any>;
-    mtime: number;
-}
 
 export interface BaseColumnDefinition {
     name: string;
@@ -38,10 +32,10 @@ export interface BaseConfiguration {
 export class BaseManager {
     private app: App;
     private settings: any;
-    private cache = new Map<string, CacheEntry>();
     private updateQueue = new Set<string>();
     private isUpdating = false;
     private baseConfiguration: BaseConfiguration;
+    private eventRefs: EventRef[] = [];
 
     constructor(app: App, settings: any) {
         this.app = app;
@@ -157,39 +151,29 @@ export class BaseManager {
 
     private setupEventListeners(): void {
         // Debounced file change handling
-        this.app.vault.on('modify', this.debounce(this.onFileModified.bind(this), 1000));
-        this.app.vault.on('create', this.onFileCreated.bind(this));
-        this.app.vault.on('delete', this.onFileDeleted.bind(this));
-    }
+        const debouncedModify = debounce(this.onFileModified.bind(this), 1000, true);
 
-    private debounce(func: Function, wait: number) {
-        let timeout: NodeJS.Timeout;
-        return (...args: any[]) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => func.apply(this, args), wait);
-        };
+        const modifyRef = this.app.vault.on('modify', debouncedModify);
+        const createRef = this.app.vault.on('create', this.onFileCreated.bind(this));
+
+        this.eventRefs.push(modifyRef, createRef);
     }
 
     private async onFileModified(file: TFile): Promise<void> {
-        if (this.isProblemFile(file)) {
+        if (file instanceof TFile && this.isProblemFile(file)) {
             this.queueUpdate(file.path);
         }
     }
 
     private async onFileCreated(file: TFile): Promise<void> {
-        if (this.isProblemFile(file)) {
-            this.cache.delete(file.path);
+        if (file instanceof TFile && this.isProblemFile(file)) {
             this.queueUpdate(file.path);
         }
     }
 
-    private onFileDeleted(file: TFile): void {
-        this.cache.delete(file.path);
-    }
-
     private isProblemFile(file: TFile): boolean {
-        return file.path.startsWith(this.settings.individualNotesPath) && 
-               file.extension === 'md';
+        return file.path.startsWith(this.settings.individualNotesPath) &&
+            file.extension === 'md';
     }
 
     private queueUpdate(filePath: string): void {
@@ -199,7 +183,7 @@ export class BaseManager {
 
     private async processUpdateQueue(): Promise<void> {
         if (this.isUpdating || this.updateQueue.size === 0) return;
-        
+
         this.isUpdating = true;
         const updates = Array.from(this.updateQueue);
         this.updateQueue.clear();
@@ -213,7 +197,7 @@ export class BaseManager {
 
     private async batchProcessFiles(filePaths: string[]): Promise<void> {
         const BATCH_SIZE = 20;
-        
+
         for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
             const batch = filePaths.slice(i, i + BATCH_SIZE);
             await Promise.all(batch.map(async (path) => {
@@ -227,40 +211,17 @@ export class BaseManager {
 
     private async updateSingleFile(file: TFile): Promise<void> {
         try {
-            const cachedContent = await this.getCachedContent(file);
+            const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
         } catch (error) {
             console.error(`Failed to update ${file.path}:`, error);
         }
     }
 
-    private async getCachedContent(file: TFile): Promise<CacheEntry> {
-        const mtime = file.stat.mtime;
-        const cached = this.cache.get(file.path);
-        
-        if (cached && cached.mtime === mtime) {
-            return cached;
-        }
-        
-        const content = await this.app.vault.read(file);
-        const frontmatter = this.parseFrontmatter(content);
-        
-        const entry: CacheEntry = { content, frontmatter, mtime };
-        this.cache.set(file.path, entry);
-        return entry;
-    }
-
-    private parseFrontmatter(content: string): Record<string, any> {
-        const frontmatterRegex = /^---\n([\s\S]*?)\n---/;
-        const match = content.match(frontmatterRegex);
-        
-        if (!match) return {};
-        
-        try {
-            return parseYaml(match[1]) || {};
-        } catch (error) {
-            console.warn('Failed to parse frontmatter:', error);
-            return {};
-        }
+     /**
+     * Get frontmatter using Obsidian's MetadataCache
+     */
+    private getFrontmatter(file: TFile): Record<string, any> | undefined {
+        return this.app.metadataCache.getFileCache(file)?.frontmatter;
     }
 
     /**
@@ -268,27 +229,26 @@ export class BaseManager {
      */
     async createOrUpdateBase(): Promise<void> {
         const baseFilePath = this.getBaseFilePath();
-        
+
         try {
             await this.ensureDirectory(this.getDirectoryPath(baseFilePath));
-            
+
             const baseContent = this.generateBaseContent();
             const existingFile = this.app.vault.getAbstractFileByPath(baseFilePath);
-            
+
             if (existingFile instanceof TFile) {
                 // Only update if content has changed
-                const currentContent = await this.app.vault.read(existingFile);
-                if (currentContent !== baseContent) {
-                    await this.app.vault.modify(existingFile, baseContent);
-                    new Notice("LeetCode Problems base updated");
-                }
-            } else {
+                await this.app.vault.process(existingFile, (currentContent) => {
+                    if (currentContent !== baseContent) {
+                        return baseContent;
+                    }
+                    return currentContent;
+                });
+            } else if (!existingFile) {
                 await this.app.vault.create(baseFilePath, baseContent);
-                new Notice("LeetCode Problems base created");
             }
         } catch (error) {
-            console.error("Error managing base:", error);
-            new Notice(`Error: ${error.message}`);
+            console.error("Error managing base:", error);        
         }
     }
 
@@ -321,36 +281,36 @@ export class BaseManager {
     /**
      * Batch update multiple problems
      */
-    async batchUpdateProblems(problems: LeetCodeProblem[]): Promise<void> {
+    async batchUpdateProblems(problems: LeetCodeProblem[]): Promise<{ updated: number; failed: number }> {
         const BATCH_SIZE = 10; // Process in smaller batches to avoid overwhelming the system
         const results = [];
 
         for (let i = 0; i < problems.length; i += BATCH_SIZE) {
             const batch = problems.slice(i, i + BATCH_SIZE);
-            const batchPromises = batch.map(problem => 
+            const batchPromises = batch.map(problem =>
                 this.updateProblemInBase(problem).catch(error => {
                     console.error(`Failed to update ${problem.title}:`, error);
                     return { success: false, problem: problem.title, error: error.message };
                 })
             );
-            
+
             const batchResults = await Promise.allSettled(batchPromises);
             results.push(...batchResults);
-            
-            // Small delay between batches to prevent overwhelming the file system
+
+            // Small delay between batches
             if (i + BATCH_SIZE < problems.length) {
-                await new Promise(resolve => setTimeout(resolve, 100));
+                 await new Promise(resolve => window.setTimeout(resolve, 100));
             }
         }
 
         const successful = results.filter(r => r.status === 'fulfilled').length;
         const failed = results.length - successful;
 
-        // console.log(`Batch update completed: ${successful} successful, ${failed} failed`);
-        
-        if (successful > 0) {
-            new Notice(`Updated ${successful} problems${failed > 0 ? ` (${failed} failed)` : ''}`);
+        return  {
+            updated: successful,
+            failed: failed
         }
+
     }
 
     /**
@@ -378,7 +338,7 @@ export class BaseManager {
             difficulty: problem.difficulty,
             topics: problem.topics,
             status: problem.status,
-            date_solved: problem.timestamp ? 
+            date_solved: problem.timestamp ?
                 new Date(problem.timestamp * 1000).toISOString().split('T')[0] : null,
             url: problem.url,
             language: problem.language || 'python',
@@ -389,26 +349,22 @@ export class BaseManager {
         await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
             Object.assign(frontmatter, updates);
         });
-
-        // Invalidate cache
-        this.cache.delete(file.path);
     }
 
     /**
-     * Stream-based validation for large vaults
+     * Validation for base integrity
      */
     async validateBaseIntegrity(): Promise<{ valid: boolean; issues: string[] }> {
         const issues: string[] = [];
         const files = await this.getProblemsInFolder();
-        
-        // Process in chunks to manage memory
+
         const CHUNK_SIZE = 50;
         for (let i = 0; i < files.length; i += CHUNK_SIZE) {
             const chunk = files.slice(i, i + CHUNK_SIZE);
             const results = await Promise.allSettled(
                 chunk.map(file => this.validateProblemNote(file))
             );
-            
+
             results.forEach((result, index) => {
                 if (result.status === 'fulfilled' && !result.value.valid) {
                     issues.push(`${chunk[index].path}: ${result.value.issues.join(', ')}`);
@@ -423,26 +379,32 @@ export class BaseManager {
 
     private async validateProblemNote(file: TFile): Promise<{ valid: boolean; issues: string[] }> {
         const issues: string[] = [];
-        
+
         try {
-            const cached = await this.getCachedContent(file);
+            const frontmatter = this.getFrontmatter(file);
+
+            if (!frontmatter) {
+                issues.push('Missing frontmatter');
+                return { valid: false, issues };
+            }
+
             const requiredFields = ['problem_id', 'title', 'difficulty', 'status'];
-            
+
             for (const field of requiredFields) {
-                if (!(field in cached.frontmatter)) {
+                if (!(field in frontmatter)) {
                     issues.push(`Missing required field: ${field}`);
                 }
             }
 
             return { valid: issues.length === 0, issues };
         } catch (error) {
-            return { valid: false, issues: [`Error reading file: ${error.message}`] };
+            return { valid: false, issues: [`Error reading file: ${(error as Error).message}`] };
         }
     }
 
     private getProblemNotePath(problem: LeetCodeProblem): string {
         const fileName = this.sanitizeFileName(problem.title);
-        return this.normalizePath(`${this.settings.individualNotesPath}/${fileName}.md`);
+        return normalizePath(`${this.settings.individualNotesPath}/${fileName}.md`);
     }
 
     private sanitizeFileName(title: string): string {
@@ -454,76 +416,55 @@ export class BaseManager {
     }
 
     /**
-     * Existing IDs retrieval using cache
+     * Existing IDs retrieval using MetadataCache
      */
     async getExistingProblemIds(): Promise<Set<number>> {
         const ids = new Set<number>();
-        
+
         try {
-            // First check if the directory exists
             const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
-            if (!folder) {
-                // console.log("Individual notes folder doesn't exist, returning empty set");
+            if (!(folder instanceof TFolder)) {
                 return ids;
             }
 
             const files = await this.getProblemsInFolder();
 
-            // If no files exist, return empty set
             if (files.length === 0) {
-                // console.log("No problem files found in folder, returning empty set");
                 return ids;
             }
 
-
-            // Process files in batches to avoid memory issues
-            const BATCH_SIZE = 50;
-            for (let i = 0; i < files.length; i += BATCH_SIZE) {
-                const batch = files.slice(i, i + BATCH_SIZE);
-                
-                const batchResults = await Promise.allSettled(
-                    batch.map(file => this.getCachedContent(file))
-                );
-                
-                batchResults.forEach((result, index) => {
-                    if (result.status === 'fulfilled') {
-                        const problemId = result.value.frontmatter.problem_id;
-                        if (typeof problemId === 'number' && problemId > 0) {
-                            ids.add(problemId);
-                        }
-                    } else {
-                        console.warn(`Failed to read ${batch[index].path}:`, result.reason);
+            // Use MetadataCache instead of reading files
+           for (const file of files) {
+                const frontmatter = this.getFrontmatter(file);
+                if (frontmatter) {
+                    const problemId = frontmatter.problem_id;
+                    if (typeof problemId === 'number' && problemId > 0) {
+                        ids.add(problemId);
                     }
-                });
+                }
             }
-            
-            // console.log(`Found ${ids.size} existing problem IDs`);
         } catch (error) {
             console.warn("Error retrieving existing problem IDs:", error);
         }
-        
+
         return ids;
     }
 
     // Utility methods
     private getBaseFilePath(): string {
-        return this.normalizePath(this.settings.baseFilePath || "DSA/leetcode-problems.base");
+        return normalizePath(this.settings.baseFilePath || "DSA/leetcode-problems.base");
     }
 
     private getDirectoryPath(filePath: string): string {
         return filePath.substring(0, filePath.lastIndexOf('/'));
     }
 
-    private normalizePath(path: string): string {
-        return path.replace(/\\/g, '/').replace(/\/+/g, '/');
-    }
-
     private async ensureDirectory(dirPath: string): Promise<void> {
         try {
-            const folder = this.app.vault.getAbstractFileByPath(dirPath);
-            if (!folder) {
-                await this.app.vault.createFolder(dirPath);
-                // console.log(`Created directory: ${dirPath}`);
+            const normalizedPath = normalizePath(dirPath);
+            const folder = this.app.vault.getAbstractFileByPath(normalizedPath);
+            if (!(folder instanceof TFolder)) {
+                await this.app.vault.createFolder(normalizedPath);
             }
         } catch (error) {
             console.error(`Failed to create directory ${dirPath}:`, error);
@@ -532,42 +473,37 @@ export class BaseManager {
     }
 
     private async getProblemsInFolder(): Promise<TFile[]> {
-        const files: TFile[] = [];
-
         try {
             const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
-            if (!folder) {
-                return files;
+            if (!(folder instanceof TFolder)) {
+                return [];
             }
 
             // Get all markdown files in the problems folder
             const allFiles = this.app.vault.getMarkdownFiles();
-            const problemFiles = allFiles.filter(file => 
-            file.path.startsWith(this.settings.individualNotesPath + '/') &&
-            file.extension === 'md'
+            const problemFiles = allFiles.filter(file =>
+                file.path.startsWith(this.settings.individualNotesPath + '/') &&
+                file.extension === 'md'
             );
-        
+
             return problemFiles;
         } catch (error) {
             console.error("Error getting problems in folder:", error);
-            return files;
+            return [];
         }
-    } 
-
-    // Clear all cached data
-    clearCache(): void {
-        this.cache.clear();    
     }
+
 
     // Clean up resources
     destroy(): void {
-        this.cache.clear();
+        // Unregister all event listeners
+        this.eventRefs.forEach(ref => this.app.vault.offref(ref));
+        this.eventRefs = [];
         this.updateQueue.clear();
     }
 
     updateSettings(settings: any): void {
         this.settings = settings;
         this.initializeBaseConfiguration();
-        this.cache.clear();
     }
 }
