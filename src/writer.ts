@@ -350,7 +350,7 @@ ${backlink}
     /**
      * Generate statistics report based on solved problems
      */
-    async generateStatsReport(): Promise<string> {
+    generateStatsReport(): string {
         try {
             // Get existing problem IDs to calculate stats
             const existingIds = this.baseManager.getExistingProblemIds();
