@@ -83,7 +83,7 @@ npm run build
 
 ## License
 
-MIT License. See LICENSE file.
+MIT License. See [LICENSE](LICENSE) file.
 
 ## Links
 
