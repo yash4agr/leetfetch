@@ -1,4 +1,4 @@
-import { App, TFile, TFolder, Notice, normalizePath } from 'obsidian';
+import { App, TFile, TFolder, Notice, normalizePath, Plugin } from 'obsidian';
 import { LeetCodeProblem } from './leetcode';
 import { BaseManager } from './bases';
 
@@ -29,30 +29,42 @@ const DEFAULT_NOTE_TEMPLATE = `# {{title}}
 
 `;
 
+interface PluginSettings {
+	noteTemplatePath: string;
+	useBasesFormat: boolean;
+	createIndividualNotes: boolean;
+	individualNotesPath: string;
+	topicTagsEnabled: boolean;
+	topicBacklinkEnabled: boolean;
+	topicNotesPath: string;
+	baseFilePath: string;
+	basesDefaultView: string;
+}
+
 /**
  * Handles writing LeetCode problems to individual notes and managing Base integration
  */
 export class ProblemLogWriter {
     private app: App;
-    private settings: any;
-    private plugin: any;
+    private settings: PluginSettings;
+    private plugin: Plugin;
     private processedProblems: Set<string> = new Set();
     private noteTemplate: string = DEFAULT_NOTE_TEMPLATE;
     private baseManager: BaseManager;
 
-    constructor(app: App, settings: any, plugin: any) {
+    constructor(app: App, settings: PluginSettings, plugin: Plugin) {
         this.app = app;
         this.settings = settings;
         this.plugin = plugin;
         this.baseManager = new BaseManager(app, settings);
-        this.loadProcessedProblems();
-        this.loadNoteTemplate();
+        void this.loadProcessedProblems();
+        void this.loadNoteTemplate();
     }
 
-    updateSettings(settings: any): void {
+    updateSettings(settings: PluginSettings): void {
         this.settings = settings;
         this.baseManager.updateSettings(settings);
-        this.loadNoteTemplate();
+        void this.loadNoteTemplate();
     }
 
     private async loadNoteTemplate(): Promise<void> {
@@ -80,7 +92,7 @@ export class ProblemLogWriter {
      */
     async updateProblemBase(problems: LeetCodeProblem[]): Promise<LeetCodeProblem[]> {
         // Get existing problem IDs to avoid duplicates
-        const existingProblemIds = await this.baseManager.getExistingProblemIds();
+        const existingProblemIds = this.baseManager.getExistingProblemIds();
 
         // Filter out already processed problems
         const newProblems = problems.filter(p =>
@@ -102,7 +114,7 @@ export class ProblemLogWriter {
 
         // Mark as processed
         newProblems.forEach(p => this.processedProblems.add(p.titleSlug));
-        this.saveProcessedProblems();
+        void this.saveProcessedProblems();
 
         return newProblems;
     }
@@ -308,7 +320,7 @@ ${backlink}
     // Utility methods
     private async loadProcessedProblems(): Promise<void> {
         try {
-            const data = await this.plugin.loadData();
+            const data = await this.plugin.loadData() as { processedProblems?: string[] } | null;
             if (data?.processedProblems) {
                 this.processedProblems = new Set(data.processedProblems);
             }
@@ -317,7 +329,7 @@ ${backlink}
             const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
             if (!(folder instanceof TFolder)) {
                 this.processedProblems.clear();
-                await this.saveProcessedProblems();
+                void this.saveProcessedProblems();
             }
         } catch (e) {
             console.error('Failed to load processed problems:', e);
@@ -327,7 +339,7 @@ ${backlink}
 
     private async saveProcessedProblems(): Promise<void> {
         try {
-            const existingData = await this.plugin.loadData() || {};
+            const existingData = await this.plugin.loadData() as Record<string, unknown> | null || {};
             existingData.processedProblems = Array.from(this.processedProblems);
             await this.plugin.saveData(existingData);
         } catch (e) {
@@ -341,7 +353,7 @@ ${backlink}
     async generateStatsReport(): Promise<string> {
         try {
             // Get existing problem IDs to calculate stats
-            const existingIds = await this.baseManager.getExistingProblemIds();
+            const existingIds = this.baseManager.getExistingProblemIds();
 
             return `# LeetCode progress report
 
@@ -369,6 +381,6 @@ Please check your plugin configuration and try again.`;
 
     clearProcessedProblems(): void {
         this.processedProblems.clear();
-        this.saveProcessedProblems();
+        void this.saveProcessedProblems();
     }
 }
