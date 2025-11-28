@@ -7,6 +7,7 @@ import {
 	Setting,
 	TFile,
 	TFolder,
+	Modal,
 } from "obsidian";
 import { LeetCodeAPI } from "./leetcode";
 import { ProblemLogWriter } from "./writer";
@@ -82,12 +83,47 @@ const DEFAULT_SETTINGS: LeetFetchSettings = {
 	requestTimeout: 30000,
 };
 
+class ConfirmModal extends Modal {
+	private message: string;
+	private onConfirm: () => void;
+
+	constructor(app: App, message: string, onConfirm: () => void) {
+		super(app);
+		this.message = message;
+		this.onConfirm = onConfirm;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.createEl("p", { text: this.message });
+
+		const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
+
+		buttonContainer.createEl("button", { text: "Cancel" }).onclick = () => {
+			this.close();
+		};
+
+		const confirmBtn = buttonContainer.createEl("button", {
+			text: "Confirm",
+			cls: "mod-cta"
+		});
+		confirmBtn.onclick = () => {
+			this.close();
+			this.onConfirm();
+		};
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
+	}
+}
+
 export default class LeetFetchPlugin extends Plugin {
 	settings: LeetFetchSettings;
 	leetcodeAPI: LeetCodeAPI;
 	writer: ProblemLogWriter;
 	syncIntervalId: number | null = null;
-	private baseManager: BaseManager | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -97,14 +133,14 @@ export default class LeetFetchPlugin extends Plugin {
 
 		// Create an icon in the left ribbon.
 		this.addRibbonIcon("download", "Sync LeetCode problems", () => {
-			this.syncProblems();
+			void this.syncProblems();
 		});
 
 		this.addCommand({
 			id: "sync-leetcode-problems",
 			name: "Sync LeetCode problems",
 			callback: () => {
-				this.syncProblems();
+				void this.syncProblems();
 			},
 		});
 
@@ -112,7 +148,7 @@ export default class LeetFetchPlugin extends Plugin {
 			id: "sync-all-problems",
 			name: "Sync all LeetCode problems",
 			callback: () => {
-				this.syncAllProblems();
+				void this.syncAllProblems();
 			},
 		});
 
@@ -120,7 +156,7 @@ export default class LeetFetchPlugin extends Plugin {
 			id: "create-problem-note",
 			name: "Create problem note from current line",
 			callback: () => {
-				this.createProblemNoteFromCursor();
+				void this.createProblemNoteFromCursor();
 			},
 		});
 
@@ -128,7 +164,7 @@ export default class LeetFetchPlugin extends Plugin {
 			id: "initialize-bases",
 			name: "Initialize Obsidian Bases format",
 			callback: () => {
-				this.initializeBasesFormat();
+				void this.initializeBasesFormat();
 			},
 		});
 
@@ -136,7 +172,7 @@ export default class LeetFetchPlugin extends Plugin {
 			id: "validate-bases-integrity",
 			name: "Validate Bases data integrity",
 			callback: () => {
-				this.validateBasesIntegrity();
+				void this.validateBasesIntegrity();
 			},
 		});
 
@@ -145,7 +181,7 @@ export default class LeetFetchPlugin extends Plugin {
 			id: "clear-cache",
 			name: "Clear all cache (debug)",
 			callback: () => {
-				this.clearCache();
+				void this.clearCache();
 			},
 		});
 
@@ -170,7 +206,7 @@ export default class LeetFetchPlugin extends Plugin {
 			notice.setMessage("Syncing problems...");
 
 			// Check if we should fetch all problems (when base is empty or doesn't exist)
-			const shouldFetchAll = await this.shouldFetchAllProblems();
+			const shouldFetchAll = this.shouldFetchAllProblems();
 
 			let problems;
 			if (shouldFetchAll) {
@@ -233,7 +269,7 @@ export default class LeetFetchPlugin extends Plugin {
 		}
 	}
 
-	async shouldFetchAllProblems(): Promise<boolean> {
+	shouldFetchAllProblems(): boolean {
 		if (!this.settings.fetchAllOnEmpty) {
 			return false;
 		}
@@ -319,8 +355,7 @@ export default class LeetFetchPlugin extends Plugin {
 	async generateStatsReport() {
 		try {
 			const report = await this.writer.generateStatsReport();
-			const fileName = `DSA/Stats-${new Date().toISOString().split("T")[0]
-				}.md`;
+			const fileName = `DSA/Stats-${new Date().toISOString().split("T")[0]}.md`;
 
 			await this.app.vault.create(fileName, report);
 			new Notice(`Stats report generated: ${fileName}`);
@@ -380,8 +415,8 @@ export default class LeetFetchPlugin extends Plugin {
 			} else {
 				notice.setMessage(`Found ${validation.issues.length} integrity issues. Check console for details.`);
 				console.error("Bases integrity issues:", validation.issues);
-				window.setTimeout(() => notice.hide(), 4000);
 			}
+			window.setTimeout(() => notice.hide(), 4000);
 		} catch (error) {
 			console.error("Validation failed:", error);
 			notice.setMessage(`Validation failed: ${(error as Error).message}`);
@@ -393,7 +428,7 @@ export default class LeetFetchPlugin extends Plugin {
 		const notice = new Notice("Clearing cache...", 0);
 
 		try {
-			await this.writer.clearProcessedProblems();
+			this.writer.clearProcessedProblems();
 
 			const baseManager = new BaseManager(this.app, this.settings);
 			baseManager.destroy();
@@ -413,7 +448,7 @@ export default class LeetFetchPlugin extends Plugin {
 		}
 
 		this.syncIntervalId = window.setInterval(() => {
-			this.syncProblems();
+			void this.syncProblems();
 		}, this.settings.syncInterval * 60 * 1000);
 	}
 
@@ -425,7 +460,7 @@ export default class LeetFetchPlugin extends Plugin {
 		);
 	}
 
-		async saveSettings() {
+	async saveSettings() {
 		await this.saveData(this.settings);
 
 		this.leetcodeAPI?.updateSettings(this.settings);
@@ -481,7 +516,7 @@ class LeetFetchSettingTab extends PluginSettingTab {
 	}
 
 	private addQuickSetupSection(containerEl: HTMLElement): void {
-		containerEl.createEl("h2", { text: "Quick setup" });
+		new Setting(containerEl).setName("Quick setup").setHeading();
 
 		new Setting(containerEl)
 			.setName("LeetCode username")
@@ -502,7 +537,7 @@ class LeetFetchSettingTab extends PluginSettingTab {
 			.addButton((button) =>
 				button
 					.setButtonText("Test connection")
-					.setClass("mod-cta")
+					.setCta()
 					.onClick(async () => {
 						if (!this.plugin.settings.username) {
 							new Notice("Please enter your username first.");
@@ -533,7 +568,7 @@ class LeetFetchSettingTab extends PluginSettingTab {
 	}
 
 	private addAuthenticationSection(containerEl: HTMLElement): void {
-		containerEl.createEl("h2", { text: "Authentication (optional)" });
+		new Setting(containerEl).setName("Authentication (optional)").setHeading();
 
 		const authDesc = containerEl.createDiv({ cls: "setting-item-description" });
 		authDesc.createEl("p", {
@@ -577,7 +612,7 @@ class LeetFetchSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.csrfToken = value.trim();
 						await this.plugin.saveSettings();
-					})
+					});
 				text.inputEl.type = "password";
 			})
 			.addButton((button) =>
@@ -626,7 +661,7 @@ class LeetFetchSettingTab extends PluginSettingTab {
 	}
 
 	private addFileOrganizationSection(containerEl: HTMLElement): void {
-		containerEl.createEl("h2", { text: "File organization" });
+		new Setting(containerEl).setName("File organization").setHeading();
 
 		new Setting(containerEl)
 			.setName("Problems database")
@@ -685,7 +720,7 @@ class LeetFetchSettingTab extends PluginSettingTab {
 	}
 
 	private addFeaturesSection(containerEl: HTMLElement): void {
-		containerEl.createEl("h2", { text: "Features" });
+		new Setting(containerEl).setName("Features").setHeading();
 
 		new Setting(containerEl)
 			.setName("Create individual notes")
@@ -739,7 +774,7 @@ class LeetFetchSettingTab extends PluginSettingTab {
 	}
 
 	private addSyncSection(containerEl: HTMLElement): void {
-		containerEl.createEl("h2", { text: "Sync configuration" });
+		new Setting(containerEl).setName("Sync configuration").setHeading();
 
 		new Setting(containerEl)
 			.setName("Auto sync")
@@ -864,52 +899,52 @@ class LeetFetchSettingTab extends PluginSettingTab {
 	}
 
 	private addActionsSection(containerEl: HTMLElement): void {
-		containerEl.createEl("h2", { text: "Actions" });
+		new Setting(containerEl).setName("Actions").setHeading();
 
-		const actionsContainer = containerEl.createDiv({ cls: "leetfetch-actions" });
+		new Setting(containerEl)
+			.setName("Sync operations")
+			.addButton((button) =>
+				button
+					.setButtonText("Sync recent")
+					.setCta()
+					.onClick(() => void this.plugin.syncProblems())
+			)
+			.addButton((button) =>
+				button
+					.setButtonText("Sync all")
+					.onClick(() => void this.plugin.syncAllProblems())
+			);
 
-		// Primary actions
-		const primaryActions = actionsContainer.createDiv({ cls: "setting-item" });
-		primaryActions.createDiv({ cls: "setting-item-info" }).createDiv({ cls: "setting-item-name", text: "Sync operations" });
-		const primaryButtons = primaryActions.createDiv({ cls: "setting-item-control" });
+		new Setting(containerEl)
+			.setName("Data management")
+			.addButton((button) =>
+				button
+					.setButtonText("Initialize base")
+					.onClick(() => void this.plugin.initializeBasesFormat())
+			)
+			.addButton((button) =>
+				button
+					.setButtonText("Validate data")
+					.onClick(() => void this.plugin.validateBasesIntegrity())
+			)
+			.addButton((button) =>
+				button
+					.setButtonText("Clear cache")
+					.onClick(() => {
+						new ConfirmModal(
+							this.app,
+							"This will clear the plugin cache and reprocess all problems on next sync. Continue?",
+							() => void this.plugin.clearCache()
+						).open();
+					})
+			);
 
-		primaryButtons.createEl("button", {
-			text: "Sync recent",
-			cls: "mod-cta"
-		}).onclick = () => this.plugin.syncProblems();
-
-		primaryButtons.createEl("button", {
-			text: "Sync all",
-		}).onclick = () => this.plugin.syncAllProblems();
-
-		// Secondary actions
-		const secondaryActions = actionsContainer.createDiv({ cls: "setting-item" });
-		secondaryActions.createDiv({ cls: "setting-item-info" }).createDiv({ cls: "setting-item-name", text: "Data management" });
-		const secondaryButtons = secondaryActions.createDiv({ cls: "setting-item-control" });
-
-		secondaryButtons.createEl("button", {
-			text: "Initialize base"
-		}).onclick = () => this.plugin.initializeBasesFormat();
-
-		secondaryButtons.createEl("button", {
-			text: "Validate data"
-		}).onclick = () => this.plugin.validateBasesIntegrity();
-
-		secondaryButtons.createEl("button", {
-			text: "Clear cache"
-		}).onclick = () => {
-			if (confirm("This will clear the plugin cache and reprocess all problems on next sync. Continue?")) {
-				this.plugin.clearCache();
-			}
-		};
-
-		// Stats action
-		const statsAction = actionsContainer.createDiv({ cls: "setting-item" });
-		statsAction.createDiv({ cls: "setting-item-info" }).createDiv({ cls: "setting-item-name", text: "Generate report" });
-		const statsButton = statsAction.createDiv({ cls: "setting-item-control" });
-
-		statsButton.createEl("button", {
-			text: "Stats report"
-		}).onclick = () => this.plugin.generateStatsReport();
+		new Setting(containerEl)
+			.setName("Generate report")
+			.addButton((button) =>
+				button
+					.setButtonText("Stats report")
+					.onClick(() => void this.plugin.generateStatsReport())
+			);
 	}
 }

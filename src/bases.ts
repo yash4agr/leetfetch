@@ -1,4 +1,4 @@
-import { App, TFile, TFolder, Notice, stringifyYaml, debounce, normalizePath, EventRef } from 'obsidian';
+import { App, TFile, TFolder, stringifyYaml, debounce, normalizePath, EventRef } from 'obsidian';
 import { LeetCodeProblem } from './leetcode';
 
 export interface BaseColumnDefinition {
@@ -6,14 +6,14 @@ export interface BaseColumnDefinition {
     type: 'text' | 'number' | 'date' | 'boolean' | 'list' | 'link';
     description?: string;
     required?: boolean;
-    defaultValue?: any;
+    defaultValue?: string | number | boolean;
 }
 
 export interface BaseView {
     name: string;
     type: 'table' | 'cards';
     columns: string[];
-    filters?: Record<string, any>;
+    filters?: Record<string, string | string[]>;
     sort?: {
         column: string;
         direction: 'asc' | 'desc';
@@ -29,15 +29,21 @@ export interface BaseConfiguration {
     defaultView: string;
 }
 
+interface PluginSettings {
+    individualNotesPath: string;
+    basesDefaultView: string;
+    baseFilePath: string;
+}
+
 export class BaseManager {
     private app: App;
-    private settings: any;
+    private settings: PluginSettings;
     private updateQueue = new Set<string>();
     private isUpdating = false;
     private baseConfiguration: BaseConfiguration;
     private eventRefs: EventRef[] = [];
 
-    constructor(app: App, settings: any) {
+    constructor(app: App, settings: PluginSettings) {
         this.app = app;
         this.settings = settings;
         this.initializeBaseConfiguration();
@@ -159,13 +165,13 @@ export class BaseManager {
         this.eventRefs.push(modifyRef, createRef);
     }
 
-    private async onFileModified(file: TFile): Promise<void> {
+    private onFileModified(file: TFile): void {
         if (file instanceof TFile && this.isProblemFile(file)) {
             this.queueUpdate(file.path);
         }
     }
 
-    private async onFileCreated(file: TFile): Promise<void> {
+    private onFileCreated(file: TFile): void {
         if (file instanceof TFile && this.isProblemFile(file)) {
             this.queueUpdate(file.path);
         }
@@ -178,7 +184,7 @@ export class BaseManager {
 
     private queueUpdate(filePath: string): void {
         this.updateQueue.add(filePath);
-        this.processUpdateQueue();
+        void this.processUpdateQueue();
     }
 
     private async processUpdateQueue(): Promise<void> {
@@ -203,15 +209,15 @@ export class BaseManager {
             await Promise.all(batch.map(async (path) => {
                 const file = this.app.vault.getAbstractFileByPath(path);
                 if (file instanceof TFile) {
-                    await this.updateSingleFile(file);
+                    this.updateSingleFile(file);
                 }
             }));
         }
     }
 
-    private async updateSingleFile(file: TFile): Promise<void> {
+    private updateSingleFile(file: TFile): void {
         try {
-            const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+            this.app.metadataCache.getFileCache(file)?.frontmatter;
         } catch (error) {
             console.error(`Failed to update ${file.path}:`, error);
         }
@@ -220,7 +226,7 @@ export class BaseManager {
      /**
      * Get frontmatter using Obsidian's MetadataCache
      */
-    private getFrontmatter(file: TFile): Record<string, any> | undefined {
+    private getFrontmatter(file: TFile): Record<string, unknown> | undefined {
         return this.app.metadataCache.getFileCache(file)?.frontmatter;
     }
 
@@ -248,7 +254,7 @@ export class BaseManager {
                 await this.app.vault.create(baseFilePath, baseContent);
             }
         } catch (error) {
-            console.error("Error managing base:", error);        
+            console.error("Error managing base:", error);
         }
     }
 
@@ -283,14 +289,14 @@ export class BaseManager {
      */
     async batchUpdateProblems(problems: LeetCodeProblem[]): Promise<{ updated: number; failed: number }> {
         const BATCH_SIZE = 10; // Process in smaller batches to avoid overwhelming the system
-        const results = [];
+        const results: PromiseSettledResult<void | { success: boolean; problem: string; error: string }>[] = [];
 
         for (let i = 0; i < problems.length; i += BATCH_SIZE) {
             const batch = problems.slice(i, i + BATCH_SIZE);
             const batchPromises = batch.map(problem =>
                 this.updateProblemInBase(problem).catch(error => {
                     console.error(`Failed to update ${problem.title}:`, error);
-                    return { success: false, problem: problem.title, error: error.message };
+                    return { success: false, problem: problem.title, error: (error as Error).message };
                 })
             );
 
@@ -299,17 +305,17 @@ export class BaseManager {
 
             // Small delay between batches
             if (i + BATCH_SIZE < problems.length) {
-                 await new Promise(resolve => window.setTimeout(resolve, 100));
+                await new Promise<void>(resolve => window.setTimeout(resolve, 100));
             }
         }
 
         const successful = results.filter(r => r.status === 'fulfilled').length;
         const failed = results.length - successful;
 
-        return  {
+        return {
             updated: successful,
             failed: failed
-        }
+        };
 
     }
 
@@ -356,13 +362,13 @@ export class BaseManager {
      */
     async validateBaseIntegrity(): Promise<{ valid: boolean; issues: string[] }> {
         const issues: string[] = [];
-        const files = await this.getProblemsInFolder();
+        const files = this.getProblemsInFolder();
 
         const CHUNK_SIZE = 50;
         for (let i = 0; i < files.length; i += CHUNK_SIZE) {
             const chunk = files.slice(i, i + CHUNK_SIZE);
             const results = await Promise.allSettled(
-                chunk.map(file => this.validateProblemNote(file))
+                chunk.map(file => Promise.resolve(this.validateProblemNote(file)))
             );
 
             results.forEach((result, index) => {
@@ -377,7 +383,7 @@ export class BaseManager {
         return { valid: issues.length === 0, issues };
     }
 
-    private async validateProblemNote(file: TFile): Promise<{ valid: boolean; issues: string[] }> {
+    private validateProblemNote(file: TFile): { valid: boolean; issues: string[] } {
         const issues: string[] = [];
 
         try {
@@ -418,7 +424,7 @@ export class BaseManager {
     /**
      * Existing IDs retrieval using MetadataCache
      */
-    async getExistingProblemIds(): Promise<Set<number>> {
+    getExistingProblemIds(): Set<number> {
         const ids = new Set<number>();
 
         try {
@@ -427,7 +433,7 @@ export class BaseManager {
                 return ids;
             }
 
-            const files = await this.getProblemsInFolder();
+            const files = this.getProblemsInFolder();
 
             if (files.length === 0) {
                 return ids;
@@ -472,7 +478,7 @@ export class BaseManager {
         }
     }
 
-    private async getProblemsInFolder(): Promise<TFile[]> {
+    private getProblemsInFolder(): TFile[] {
         try {
             const folder = this.app.vault.getAbstractFileByPath(this.settings.individualNotesPath);
             if (!(folder instanceof TFolder)) {
@@ -502,7 +508,7 @@ export class BaseManager {
         this.updateQueue.clear();
     }
 
-    updateSettings(settings: any): void {
+    updateSettings(settings: PluginSettings): void {
         this.settings = settings;
         this.initializeBaseConfiguration();
     }

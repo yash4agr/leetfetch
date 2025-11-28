@@ -40,6 +40,36 @@ interface APISettings {
 	requestTimeout: number;
 }
 
+interface GraphQLError {
+	message?: string;
+}
+
+interface GraphQLResponse {
+	data?: Record<string, unknown>;
+	errors?: GraphQLError[];
+}
+
+interface SubmissionListPage {
+	lastKey: string | null;
+	hasNext: boolean;
+	submissions: Array<{
+		id: string;
+		title: string;
+		titleSlug: string;
+		timestamp: number;
+		statusDisplay: string;
+		lang: string;
+		runtime: string;
+		memory: string;
+		isPending: boolean;
+	}>;
+}
+
+interface TopicTag {
+	name: string;
+	slug: string;
+}
+
 class LeetCodeAPIError extends Error {
 	constructor(
 		message: string,
@@ -66,7 +96,7 @@ export class LeetCodeAPI {
 	private csrfToken: string | null = null;
 	private csrfTokenExpiry: number = 0;
 
-	constructor(settings: any) {
+	constructor(settings: APISettings) {
 		this.settings = {
 			username: settings.username || '',
 			sessionToken: settings.sessionToken,
@@ -77,7 +107,7 @@ export class LeetCodeAPI {
 		};
 	}
 
-	updateSettings(settings: any): void {
+	updateSettings(settings: APISettings): void {
 		this.settings = {
 			username: settings.username || '',
 			sessionToken: settings.sessionToken,
@@ -102,7 +132,7 @@ export class LeetCodeAPI {
 				// Extract question IDs from log
 				const questionIdRegex = /(?:id|questionId|problem_id):\s*(\d+)/gi;
 				const titleSlugRegex = /(?:titleSlug|title_slug):\s*["']([^"']+)["']/gi;
-				const urlRegex = /https:\/\/leetcode\.com\/problems\/([^\/\s]+)/gi;
+				const urlRegex = /https:\/\/leetcode\.com\/problems\/([^/\s]+)/gi;
 
 				let match;
 
@@ -164,7 +194,7 @@ export class LeetCodeAPI {
 	/**
 	 * Gets current CSRF token, if available.
 	 */
-	private async getCSRFToken(): Promise<string | null> {
+	private getCSRFToken(): string | null {
 		// Use user-provided token first
 		if (this.settings.csrfToken?.trim()) {
 			return this.settings.csrfToken.trim();
@@ -214,8 +244,8 @@ export class LeetCodeAPI {
 
 	private async makeGraphQLRequest(
 		query: string,
-		variables: any = {}
-	): Promise<any> {
+		variables: Record<string, unknown> = {}
+	): Promise<Record<string, unknown>> {
 		if (!query.trim()) {
 			throw new LeetCodeAPIError('GraphQL query cannot be empty', 'UNKNOWN', undefined, false);
 		}
@@ -236,7 +266,7 @@ export class LeetCodeAPI {
 			}
 
 			// Add CSRF token if available
-			const csrfToken = await this.getCSRFToken();
+			const csrfToken = this.getCSRFToken();
 			if (csrfToken) {
 				headers["X-CSRFToken"] = csrfToken;
 				// Also add to cookies if we have a session
@@ -262,7 +292,7 @@ export class LeetCodeAPI {
 
 				// Log full response on errors for debugging
 				if (response.status >= 400) {
-					console.error('Error Response Details:', {
+					console.error('Error response details:', {
 						status: response.status,
 						fullResponse: response.text,
 						requestQuery: query,
@@ -330,10 +360,10 @@ export class LeetCodeAPI {
 					);
 				}
 
-				let data;
+				let data: GraphQLResponse;
 				try {
-					data = JSON.parse(response.text);
-				} catch (parseError) {
+					data = JSON.parse(response.text) as GraphQLResponse;
+				} catch {
 					throw new LeetCodeAPIError(
 						'Invalid JSON response from LeetCode API',
 						'NETWORK',
@@ -344,8 +374,8 @@ export class LeetCodeAPI {
 
 				if (data.errors) {
 					const errorMessage = Array.isArray(data.errors)
-						? data.errors.map((e: any) => e.message || e.toString()).join('; ')
-						: data.errors.toString();
+						? data.errors.map((e: GraphQLError) => e.message || String(e)).join('; ')
+						: String(data.errors);
 
 					// Check for specific GraphQL errors
 					if (errorMessage.includes('User not found')) {
@@ -365,7 +395,7 @@ export class LeetCodeAPI {
 					);
 				}
 
-				return data.data;
+				return data.data || {};
 			} catch (error) {
 				if (error instanceof LeetCodeAPIError) {
 					throw error;
@@ -400,7 +430,7 @@ export class LeetCodeAPI {
 		});
 	}
 
-	async fetchUserProfile(): Promise<any> {
+	async fetchUserProfile(): Promise<Record<string, unknown>> {
 		if (!this.settings.username?.trim()) {
 			throw new LeetCodeAPIError('Username is required', 'AUTH', undefined, false);
 		}
@@ -464,7 +494,7 @@ export class LeetCodeAPI {
 			);
 		}
 
-		return data.matchedUser;
+		return data.matchedUser as Record<string, unknown>;
 	}
 
 	async fetchRecentSubmissions(
@@ -496,7 +526,17 @@ export class LeetCodeAPI {
 			limit: submissionLimit
 		});
 
-		if (!data.recentAcSubmissionList) {
+		const submissionList = data.recentAcSubmissionList as Array<{
+			id: string;
+			title: string;
+			titleSlug: string;
+			timestamp: number;
+			statusDisplay: string;
+			lang: string;
+			url: string;
+		}> | undefined;
+
+		if (!submissionList) {
 			return [];
 		}
 
@@ -504,7 +544,7 @@ export class LeetCodeAPI {
 		const seenTitleSlugs = new Set<string>();
 		const failedProblems: string[] = [];
 
-		for (const submission of data.recentAcSubmissionList) {
+		for (const submission of submissionList) {
 			try {
 				// Skip duplicates within this batch using titleSlug
 				if (seenTitleSlugs.has(submission.titleSlug)) {
@@ -550,7 +590,7 @@ export class LeetCodeAPI {
 		}
 
 		if (failedProblems.length > 0) {
-			console.warn(`Failed to fetch ${failedProblems.length} problem details out of ${data.recentAcSubmissionList.length} submissions`);
+			console.warn(`Failed to fetch ${failedProblems.length} problem details out of ${submissionList.length} submissions`);
 		}
 
 		return problems.sort((a, b) => b.timestamp - a.timestamp);
@@ -597,13 +637,13 @@ export class LeetCodeAPI {
 
 		while (hasNext && consecutiveFailures < maxConsecutiveFailures && totalProcessed < maxProblems) {
 			try {
-				const data: any = await this.makeGraphQLRequest(query, {
+				const data = await this.makeGraphQLRequest(query, {
 					offset,
 					limit,
 					lastKey
 				});
 
-				const page: any = data.submissionList;
+				const page = data.submissionList as SubmissionListPage | undefined;
 
 				if (!page?.submissions) {
 					console.warn('No submissions found in response page');
@@ -614,7 +654,7 @@ export class LeetCodeAPI {
 
 				// Process only if accepted submissions
 				const acceptedSubmissions = page.submissions.filter(
-					(sub: any) => sub.statusDisplay === "Accepted"
+					(sub) => sub.statusDisplay === "Accepted"
 				);
 
 				for (const sub of acceptedSubmissions) {
@@ -708,7 +748,16 @@ export class LeetCodeAPI {
 
 		const data = await this.makeGraphQLRequest(query, { titleSlug });
 
-		if (!data.question) {
+		const question = data.question as {
+			questionId: string;
+			title: string;
+			titleSlug: string;
+			content: string;
+			difficulty: string;
+			topicTags: TopicTag[];
+		} | undefined;
+
+		if (!question) {
 			throw new LeetCodeAPIError(
 				`Problem not found: ${titleSlug}`,
 				'NOT_FOUND',
@@ -717,17 +766,15 @@ export class LeetCodeAPI {
 			);
 		}
 
-		const problem = data.question;
-
 		return {
-			id: parseInt(problem.questionId),
-			title: problem.title || "Unknown Title",
+			id: parseInt(question.questionId),
+			title: question.title || "Unknown Title",
 			titleSlug: titleSlug,
-			difficulty: problem.difficulty || "Unknown",
-			topics: problem.topicTags?.map((tag: any) => tag.name).filter(Boolean) || [],
+			difficulty: question.difficulty || "Unknown",
+			topics: question.topicTags?.map((tag: TopicTag) => tag.name).filter(Boolean) || [],
 			url: `${this.baseURL}/problems/${titleSlug}/`,
-			description: this.cleanDescription(problem.content || ""),
-			tags: problem.topicTags?.map((tag: any) => `[[${tag.name}]]`).filter(Boolean) || [],
+			description: this.cleanDescription(question.content || ""),
+			tags: question.topicTags?.map((tag: TopicTag) => `[[${tag.name}]]`).filter(Boolean) || [],
 		};
 	}
 
@@ -766,22 +813,35 @@ export class LeetCodeAPI {
 		try {
 			const data = await this.makeGraphQLRequest(query, { submissionId });
 
-			if (!data.submissionDetails) {
+			
+			const submissionDetails = data.submissionDetails as {
+				id: number;
+				code: string;
+				lang: { name: string };
+				runtime: string;
+				memory: string;
+				runtimePercentile: number;
+				memoryPercentile: number;
+				statusDisplay: string;
+				timestamp: number;
+				totalCorrect: number;
+				totalTestcases: number;
+			} | undefined;
+
+			if (!submissionDetails) {
 				return undefined;
 			}
 
-			const submission = data.submissionDetails;
-
 			return {
-				id: submission.id,
-				code: submission.code || "",
-				lang: submission.lang?.name || "Unknown",
-				runtime: submission.runtime || "",
-				memory: submission.memory || "",
-				runtimePercentile: submission.runtimePercentile || 0,
-				memoryPercentile: submission.memoryPercentile || 0,
-				statusDisplay: submission.totalCorrect === submission.totalTestcases ? "Solved" : "Attempted",
-				timestamp: submission.timestamp,
+				id: submissionDetails.id,
+				code: submissionDetails.code || "",
+				lang: submissionDetails.lang?.name || "Unknown",
+				runtime: submissionDetails.runtime || "",
+				memory: submissionDetails.memory || "",
+				runtimePercentile: submissionDetails.runtimePercentile || 0,
+				memoryPercentile: submissionDetails.memoryPercentile || 0,
+				statusDisplay: submissionDetails.totalCorrect === submissionDetails.totalTestcases ? "Solved" : "Attempted",
+				timestamp: submissionDetails.timestamp,
 			};
 		} catch (error) {
 			console.error(`Failed to fetch submission details for ${submissionId}:`, error);
@@ -802,7 +862,7 @@ export class LeetCodeAPI {
 			.replace(/&nbsp;/g, " ")
 			.replace(/\n\s*\n/g, "\n\n")
 			.replace(/\[/g, "\\[")
-			.replace(/\]/g, "\\]")
+			.replace(/]/g, "\\]")
 			.trim();
 	}
 
