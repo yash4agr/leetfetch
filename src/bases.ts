@@ -195,7 +195,7 @@ export class BaseManager {
         this.updateQueue.clear();
 
         try {
-            await this.batchProcessFiles(updates);
+            this.batchProcessFiles(updates);
         } finally {
             this.isUpdating = false;
         }
