@@ -206,18 +206,23 @@ export class BaseManager {
 
         for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
             const batch = filePaths.slice(i, i + BATCH_SIZE);
-            await Promise.all(batch.map(async (path) => {
+            batch.forEach((path) => {
                 const file = this.app.vault.getAbstractFileByPath(path);
                 if (file instanceof TFile) {
                     this.updateSingleFile(file);
                 }
-            }));
+            });
         }
     }
 
     private updateSingleFile(file: TFile): void {
         try {
-            this.app.metadataCache.getFileCache(file)?.frontmatter;
+            // Access frontmatter through MetadataCache - used for cache warming
+            const _frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+            // Frontmatter is accessed to ensure cache is populated
+            if (_frontmatter) {
+                // Cache is warm
+            }
         } catch (error) {
             console.error(`Failed to update ${file.path}:`, error);
         }

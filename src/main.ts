@@ -354,7 +354,7 @@ export default class LeetFetchPlugin extends Plugin {
 
 	async generateStatsReport() {
 		try {
-			const report = await this.writer.generateStatsReport();
+			const report = this.writer.generateStatsReport();
 			const fileName = `DSA/Stats-${new Date().toISOString().split("T")[0]}.md`;
 
 			await this.app.vault.create(fileName, report);
@@ -424,7 +424,7 @@ export default class LeetFetchPlugin extends Plugin {
 		}
 	}
 
-	async clearCache() {
+	clearCache(): void {
 		const notice = new Notice("Clearing cache...", 0);
 
 		try {
@@ -641,14 +641,14 @@ class LeetFetchSettingTab extends PluginSettingTab {
 
 		const helpContent = helpToggle.createDiv({ cls: "setting-item-description" });
 
-		helpContent.createEl("h4", { text: "Method 1: Browser developer tools" });
+		helpContent.createEl("strong", { text: "Method 1: Browser developer tools" });
 		const stepsList1 = helpContent.createEl("ol");
 		stepsList1.createEl("li", { text: "Open LeetCode in your browser and log in" });
 		stepsList1.createEl("li", { text: "Press F12 to open developer tools" });
 		stepsList1.createEl("li", { text: "Go to Application tab → Storage → Cookies → https://leetcode.com" });
 		stepsList1.createEl("li", { text: "Copy values for 'LEETCODE_SESSION' and 'csrftoken'" });
 
-		helpContent.createEl("h4", { text: "Method 2: Network tab" });
+		helpContent.createEl("strong", { text: "Method 2: Network tab" });
 		const stepsList2 = helpContent.createEl("ol");
 		stepsList2.createEl("li", { text: "Open developer tools → Network tab" });
 		stepsList2.createEl("li", { text: "Refresh LeetCode page" });

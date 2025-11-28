@@ -374,8 +374,8 @@ export class LeetCodeAPI {
 
 				if (data.errors) {
 					const errorMessage = Array.isArray(data.errors)
-						? data.errors.map((e: GraphQLError) => e.message || String(e)).join('; ')
-						: String(data.errors);
+						? data.errors.map((e: GraphQLError) => e.message || JSON.stringify(e)).join('; ')
+						: JSON.stringify(data.errors);
 
 					// Check for specific GraphQL errors
 					if (errorMessage.includes('User not found')) {
