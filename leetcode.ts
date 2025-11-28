@@ -158,7 +158,7 @@ export class LeetCodeAPI {
 	}
 
 	private sleep(ms: number): Promise<void> {
-		return new Promise(resolve => setTimeout(resolve, ms));
+		return new Promise(resolve => window.setTimeout(resolve, ms));
 	}
 
 	/**
@@ -262,7 +262,7 @@ export class LeetCodeAPI {
 
 				// Log full response on errors for debugging
 				if (response.status >= 400) {
-					console.error('❌ Error Response Details:', {
+					console.error('Error Response Details:', {
 						status: response.status,
 						fullResponse: response.text,
 						requestQuery: query,
@@ -372,7 +372,7 @@ export class LeetCodeAPI {
 				}
 
 				// Handle network errors
-				if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+				if ((error as Error).message.includes('timeout') || (error as Error).message.includes('ETIMEDOUT')) {
 					throw new LeetCodeAPIError(
 						'Request timeout. Please check your internet connection.',
 						'NETWORK',
@@ -381,7 +381,7 @@ export class LeetCodeAPI {
 					);
 				}
 
-				if (error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED')) {
+				if ((error as Error).message.includes('ENOTFOUND') || (error as Error).message.includes('ECONNREFUSED')) {
 					throw new LeetCodeAPIError(
 						'Unable to connect to LeetCode. Please check your internet connection.',
 						'NETWORK',
@@ -391,7 +391,7 @@ export class LeetCodeAPI {
 				}
 
 				throw new LeetCodeAPIError(
-					`Network error: ${error.message}`,
+					`Network error: ${(error as Error).message}`,
 					'NETWORK',
 					undefined,
 					true
