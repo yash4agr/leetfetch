@@ -184,10 +184,10 @@ export class BaseManager {
 
     private queueUpdate(filePath: string): void {
         this.updateQueue.add(filePath);
-        void this.processUpdateQueue();
+        this.processUpdateQueue();
     }
 
-    private async processUpdateQueue(): Promise<void> {
+    private processUpdateQueue(): void {
         if (this.isUpdating || this.updateQueue.size === 0) return;
 
         this.isUpdating = true;
